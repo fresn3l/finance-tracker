@@ -1,11 +1,13 @@
 """Data models for finance tracker application."""
 
-from datetime import date
+from __future__ import annotations
+
+from datetime import date as DateType
 from decimal import Decimal
 from enum import Enum
 from typing import Optional
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class TransactionType(str, Enum):
@@ -25,16 +27,13 @@ class Category(BaseModel):
     )
     description: Optional[str] = Field(None, description="Optional category description")
 
-    class Config:
-        """Pydantic configuration."""
-
-        frozen = True  # Make categories immutable
+    model_config = ConfigDict(frozen=True)  # Make categories immutable
 
 
 class Transaction(BaseModel):
     """Represents a single financial transaction."""
 
-    date: date = Field(..., description="Transaction date")
+    date: "date" = Field(..., description="Transaction date")
     amount: Decimal = Field(..., description="Transaction amount (positive for credits, negative for debits)")
     description: str = Field(..., description="Transaction description/merchant name")
     category: Optional[Category] = Field(None, description="Assigned category")
@@ -71,13 +70,12 @@ class Transaction(BaseModel):
         """Get absolute value of transaction amount."""
         return abs(self.amount)
 
-    class Config:
-        """Pydantic configuration."""
-
-        json_encoders = {
+    model_config = ConfigDict(
+        json_encoders={
             Decimal: str,
-            date: lambda v: v.isoformat(),
+            DateType: lambda v: v.isoformat(),
         }
+    )
 
 
 class MonthlySummary(BaseModel):
@@ -100,12 +98,11 @@ class MonthlySummary(BaseModel):
             return None
         return float((self.net_amount / self.total_income) * 100)
 
-    class Config:
-        """Pydantic configuration."""
-
-        json_encoders = {
+    model_config = ConfigDict(
+        json_encoders={
             Decimal: str,
         }
+    )
 
 
 class SpendingPattern(BaseModel):
@@ -124,10 +121,9 @@ class SpendingPattern(BaseModel):
         None, description="Trend direction (increasing, decreasing, stable)"
     )
 
-    class Config:
-        """Pydantic configuration."""
-
-        json_encoders = {
+    model_config = ConfigDict(
+        json_encoders={
             Decimal: str,
         }
+    )
 
