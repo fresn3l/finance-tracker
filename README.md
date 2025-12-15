@@ -36,7 +36,42 @@ pip install -e ".[dev]"  # For development dependencies
 
 ## Usage
 
-(To be implemented)
+### Command Line Interface
+
+```bash
+# Import a CSV file
+finance-tracker import-csv bank_statement.csv
+
+# View monthly summary
+finance-tracker summary --year 2024 --month 1
+
+# View top categories
+finance-tracker categories
+
+# Export transactions
+finance-tracker export transactions.json --format json
+```
+
+### Web Application
+
+Start the web application:
+
+```bash
+finance-tracker-web
+```
+
+Or run directly:
+
+```bash
+python -m finance_tracker.web_app
+```
+
+The web app will open in a desktop window with a modern interface for:
+- 📊 Dashboard with statistics and charts
+- 📝 Transaction list with search and filters
+- 🏷️ Category breakdown and analysis
+- 📤 CSV file import with drag-and-drop
+- 📈 Interactive charts and visualizations
 
 ## Development
 

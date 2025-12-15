@@ -2,6 +2,9 @@
 requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
+[tool.setuptools]
+packages = ["finance_tracker"]
+
 [project]
 name = "finance-tracker"
 version = "0.1.0"
@@ -29,6 +32,7 @@ dependencies = [
     "pydantic>=2.0.0",
     "click>=8.1.0",
     "pyyaml>=6.0",
+    "eel>=0.16.0",
 ]
 
 [project.optional-dependencies]
@@ -42,6 +46,7 @@ dev = [
 
 [project.scripts]
 finance-tracker = "finance_tracker.cli:main"
+finance-tracker-web = "finance_tracker.web_app:start_web_app"
 
 [tool.black]
 line-length = 100
