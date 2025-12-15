@@ -1,11 +1,12 @@
 """Web application using Eel for finance tracker."""
 
 import logging
+import subprocess
+import sys
 from pathlib import Path
 from typing import Dict, List, Optional
 
 import eel
-import eel.browsers
 
 from finance_tracker.config import get_config
 from finance_tracker.logging_config import setup_logging
@@ -373,12 +374,41 @@ def start_web_app(port: int = 8080, size: tuple = (1200, 800)) -> None:
     
     # Start the app
     try:
-        # Set the browser path for Edge
         if Path(edge_path).exists():
-            # Set Edge path
-            eel.browsers.set_path("edge", edge_path)
+            # For macOS, we need to manually launch Edge since Eel's edge mode is Windows-only
             logger.info(f"Using Microsoft Edge at {edge_path}")
-            eel.start("index.html", size=size, port=port, mode="edge")
+            
+            # Start Eel server without opening browser automatically
+            import threading
+            import time
+            
+            def start_eel_server():
+                # Use mode='None' to prevent auto-browser launch
+                eel.start("index.html", size=size, port=port, mode=None, host="localhost")
+            
+            # Start server in background thread
+            server_thread = threading.Thread(target=start_eel_server, daemon=True)
+            server_thread.start()
+            
+            # Wait a moment for server to start
+            time.sleep(2)
+            
+            # Launch Edge manually with the URL
+            url = f"http://localhost:{port}/index.html"
+            logger.info(f"Launching Edge with URL: {url}")
+            subprocess.Popen(
+                [edge_path, "--new-window", url],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                stdin=subprocess.PIPE
+            )
+            
+            # Keep main thread alive
+            try:
+                while server_thread.is_alive():
+                    time.sleep(1)
+            except KeyboardInterrupt:
+                logger.info("Web app closed")
         else:
             # Fallback to default browser if Edge not found
             logger.warning(f"Edge not found at {edge_path}, using default browser")
