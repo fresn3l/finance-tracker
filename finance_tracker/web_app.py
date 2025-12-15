@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 import eel
+import eel.browsers
 
 from finance_tracker.config import get_config
 from finance_tracker.logging_config import setup_logging
@@ -373,7 +374,6 @@ def start_web_app(port: int = 8080, size: tuple = (1200, 800)) -> None:
     # Start the app
     try:
         # Set the browser path for Edge
-        import eel.browsers
         if Path(edge_path).exists():
             # Set Edge path
             eel.browsers.set_path("edge", edge_path)
