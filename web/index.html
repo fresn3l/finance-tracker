@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Finance Tracker</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <h1>💰 Finance Tracker</h1>
+            <nav class="nav-tabs">
+                <button class="tab-btn active" data-tab="dashboard">Dashboard</button>
+                <button class="tab-btn" data-tab="transactions">Transactions</button>
+                <button class="tab-btn" data-tab="categories">Categories</button>
+                <button class="tab-btn" data-tab="import">Import</button>
+            </nav>
+        </header>
+
+        <!-- Dashboard Tab -->
+        <div id="dashboard" class="tab-content active">
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <h3>Total Income</h3>
+                    <p class="stat-value" id="total-income">$0.00</p>
+                </div>
+                <div class="stat-card">
+                    <h3>Total Expenses</h3>
+                    <p class="stat-value" id="total-expenses">$0.00</p>
+                </div>
+                <div class="stat-card">
+                    <h3>Net Amount</h3>
+                    <p class="stat-value" id="net-amount">$0.00</p>
+                </div>
+                <div class="stat-card">
+                    <h3>Savings Rate</h3>
+                    <p class="stat-value" id="savings-rate">0%</p>
+                </div>
+            </div>
+
+            <div class="charts-grid">
+                <div class="chart-card">
+                    <h3>Monthly Spending</h3>
+                    <canvas id="monthly-chart"></canvas>
+                </div>
+                <div class="chart-card">
+                    <h3>Category Breakdown</h3>
+                    <canvas id="category-chart"></canvas>
+                </div>
+            </div>
+
+            <div class="summary-card">
+                <h3>Recent Monthly Summaries</h3>
+                <div id="monthly-summaries"></div>
+            </div>
+        </div>
+
+        <!-- Transactions Tab -->
+        <div id="transactions" class="tab-content">
+            <div class="toolbar">
+                <div class="search-box">
+                    <input type="text" id="search-input" placeholder="Search transactions...">
+                </div>
+                <div class="filters">
+                    <select id="category-filter">
+                        <option value="">All Categories</option>
+                    </select>
+                    <select id="type-filter">
+                        <option value="">All Types</option>
+                        <option value="debit">Expenses</option>
+                        <option value="credit">Income</option>
+                    </select>
+                    <input type="month" id="month-filter" placeholder="Filter by month">
+                </div>
+                <button class="btn btn-primary" onclick="exportTransactions()">Export</button>
+            </div>
+            <div class="transactions-table-container">
+                <table class="transactions-table">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Description</th>
+                            <th>Category</th>
+                            <th>Amount</th>
+                            <th>Type</th>
+                        </tr>
+                    </thead>
+                    <tbody id="transactions-tbody">
+                        <tr>
+                            <td colspan="5" class="empty-state">No transactions found. Import a CSV file to get started.</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            <div class="pagination" id="pagination"></div>
+        </div>
+
+        <!-- Categories Tab -->
+        <div id="categories" class="tab-content">
+            <div class="categories-grid">
+                <div class="chart-card full-width">
+                    <h3>Top Spending Categories</h3>
+                    <canvas id="top-categories-chart"></canvas>
+                </div>
+                <div class="categories-list" id="categories-list"></div>
+            </div>
+        </div>
+
+        <!-- Import Tab -->
+        <div id="import" class="tab-content">
+            <div class="import-card">
+                <h2>Import CSV File</h2>
+                <p>Upload a bank statement CSV file to import transactions.</p>
+                
+                <div class="file-upload-area" id="file-upload-area">
+                    <input type="file" id="file-input" accept=".csv" style="display: none;">
+                    <div class="upload-icon">📄</div>
+                    <p>Click to select a CSV file or drag and drop</p>
+                    <p class="file-name" id="file-name"></p>
+                </div>
+
+                <div class="import-options">
+                    <label>
+                        <input type="checkbox" id="auto-categorize" checked>
+                        Auto-categorize transactions
+                    </label>
+                    <label>
+                        <input type="checkbox" id="check-duplicates" checked>
+                        Check for duplicates
+                    </label>
+                    <label>
+                        <input type="text" id="account-name" placeholder="Account name (optional)">
+                    </label>
+                </div>
+
+                <button class="btn btn-primary btn-large" id="import-btn" onclick="importCSV()" disabled>
+                    Import Transactions
+                </button>
+
+                <div id="import-status"></div>
+            </div>
+
+            <div class="recent-imports">
+                <h3>Recent Imports</h3>
+                <div id="recent-imports-list"></div>
+            </div>
+        </div>
+
+        <!-- Loading Overlay -->
+        <div id="loading-overlay" class="loading-overlay" style="display: none;">
+            <div class="spinner"></div>
+            <p>Processing...</p>
+        </div>
+    </div>
+
+    <script src="eel.js"></script>
+    <script src="main.js"></script>
+</body>
+</html>
+
