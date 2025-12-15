@@ -378,37 +378,45 @@ def start_web_app(port: int = 8080, size: tuple = (1200, 800)) -> None:
             # For macOS, we need to manually launch Edge since Eel's edge mode is Windows-only
             logger.info(f"Using Microsoft Edge at {edge_path}")
             
-            # Start Eel server without opening browser automatically
+            # Check if port is available, if not try next port
+            import socket
+            def is_port_available(port_num):
+                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                    return s.connect_ex(('localhost', port_num)) != 0
+            
+            actual_port = port
+            if not is_port_available(port):
+                # Try next few ports
+                for p in range(port, port + 10):
+                    if is_port_available(p):
+                        actual_port = p
+                        logger.info(f"Port {port} in use, using port {actual_port} instead")
+                        break
+                else:
+                    logger.error(f"Could not find available port starting from {port}")
+                    return
+            
+            # Launch Edge after a short delay to allow server to start
             import threading
             import time
             
-            def start_eel_server():
-                # Use mode='None' to prevent auto-browser launch
-                eel.start("index.html", size=size, port=port, mode=None, host="localhost")
+            def launch_edge_delayed():
+                time.sleep(1.5)  # Wait for server to start
+                url = f"http://localhost:{actual_port}/index.html"
+                logger.info(f"Launching Edge with URL: {url}")
+                subprocess.Popen(
+                    [edge_path, "--new-window", url],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    stdin=subprocess.PIPE
+                )
             
-            # Start server in background thread
-            server_thread = threading.Thread(target=start_eel_server, daemon=True)
-            server_thread.start()
+            # Launch Edge in background thread
+            edge_thread = threading.Thread(target=launch_edge_delayed, daemon=True)
+            edge_thread.start()
             
-            # Wait a moment for server to start
-            time.sleep(2)
-            
-            # Launch Edge manually with the URL
-            url = f"http://localhost:{port}/index.html"
-            logger.info(f"Launching Edge with URL: {url}")
-            subprocess.Popen(
-                [edge_path, "--new-window", url],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                stdin=subprocess.PIPE
-            )
-            
-            # Keep main thread alive
-            try:
-                while server_thread.is_alive():
-                    time.sleep(1)
-            except KeyboardInterrupt:
-                logger.info("Web app closed")
+            # Start Eel server (this blocks)
+            eel.start("index.html", size=size, port=actual_port, mode=None, host="localhost")
         else:
             # Fallback to default browser if Edge not found
             logger.warning(f"Edge not found at {edge_path}, using default browser")
