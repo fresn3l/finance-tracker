@@ -367,9 +367,22 @@ def start_web_app(port: int = 8080, size: tuple = (1200, 800)) -> None:
     # Start Eel
     eel.init(str(web_dir))
     
+    # Configure for Microsoft Edge on macOS
+    edge_path = "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge"
+    
     # Start the app
     try:
-        eel.start("index.html", size=size, port=port)
+        # Set the browser path for Edge
+        import eel.browsers
+        if Path(edge_path).exists():
+            # Set Edge path
+            eel.browsers.set_path("edge", edge_path)
+            logger.info(f"Using Microsoft Edge at {edge_path}")
+            eel.start("index.html", size=size, port=port, mode="edge")
+        else:
+            # Fallback to default browser if Edge not found
+            logger.warning(f"Edge not found at {edge_path}, using default browser")
+            eel.start("index.html", size=size, port=port)
     except (SystemExit, MemoryError, KeyboardInterrupt):
         logger.info("Web app closed")
 
