@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date as DateType
+import datetime
 from decimal import Decimal
 from enum import Enum
 from typing import Optional
@@ -33,7 +33,7 @@ class Category(BaseModel):
 class Transaction(BaseModel):
     """Represents a single financial transaction."""
 
-    date: "date" = Field(..., description="Transaction date")
+    date: datetime.date = Field(..., description="Transaction date")
     amount: Decimal = Field(..., description="Transaction amount (positive for credits, negative for debits)")
     description: str = Field(..., description="Transaction description/merchant name")
     category: Optional[Category] = Field(None, description="Assigned category")
@@ -73,7 +73,7 @@ class Transaction(BaseModel):
     model_config = ConfigDict(
         json_encoders={
             Decimal: str,
-            DateType: lambda v: v.isoformat(),
+            datetime.date: lambda v: v.isoformat(),
         }
     )
 
