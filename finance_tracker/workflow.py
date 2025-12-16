@@ -1,4 +1,41 @@
-"""End-to-end workflow for processing CSV files."""
+"""
+End-to-end workflow for processing CSV files.
+
+This module provides the main workflow orchestrator that combines all components
+to process CSV files from start to finish: parsing, categorization, analysis, and storage.
+
+The FinanceTrackerWorkflow class provides a high-level interface that:
+    1. Parses CSV files into Transaction objects
+    2. Detects and handles duplicate transactions
+    3. Automatically categorizes transactions
+    4. Saves transactions to persistent storage
+    5. Provides analysis capabilities
+
+This is the recommended way to use the finance tracker programmatically.
+
+Example:
+    >>> from finance_tracker.workflow import FinanceTrackerWorkflow
+    >>> from pathlib import Path
+    >>> 
+    >>> workflow = FinanceTrackerWorkflow()
+    >>> 
+    >>> # Process a CSV file
+    >>> transactions, stats = workflow.process_csv_file(
+    ...     Path("bank_statement.csv"),
+    ...     auto_categorize=True,
+    ...     check_duplicates=True
+    ... )
+    >>> 
+    >>> print(f"Imported {stats['new_transactions']} transactions")
+    >>> print(f"Categorized: {stats.get('categorized', 0)}")
+    >>> 
+    >>> # Analyze spending
+    >>> analyzer = workflow.analyze_spending()
+    >>> summary = analyzer.get_monthly_summary(2024, 1)
+    >>> 
+    >>> # Get uncategorized transactions
+    >>> uncategorized = workflow.get_uncategorized_transactions()
+"""
 
 import logging
 from pathlib import Path

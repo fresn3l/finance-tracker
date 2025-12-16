@@ -1,4 +1,26 @@
-"""Logging configuration for finance tracker."""
+"""
+Logging configuration for finance tracker.
+
+This module provides centralized logging setup with support for:
+    - Configurable log levels (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+    - Console and file logging
+    - Verbose mode for debugging
+    - Consistent formatting across the application
+
+Example:
+    >>> from finance_tracker.logging_config import setup_logging
+    >>> from pathlib import Path
+    >>> 
+    >>> # Setup with default settings
+    >>> setup_logging()
+    >>> 
+    >>> # Setup with file logging
+    >>> setup_logging(
+    ...     level="DEBUG",
+    ...     log_file=Path("app.log"),
+    ...     verbose=True
+    ... )
+"""
 
 import logging
 import sys

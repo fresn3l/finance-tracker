@@ -1,4 +1,39 @@
-"""Configuration management for finance tracker."""
+"""
+Configuration management for finance tracker.
+
+This module provides YAML-based configuration management with support for:
+    - Default configuration generation
+    - Dot notation for nested values
+    - Configuration file persistence
+    - Type-safe value access
+
+Configuration File Location:
+    Default: ~/.finance-tracker/config.yaml
+
+Configuration Structure:
+    data:
+        directory: ~/.finance-tracker
+    logging:
+        level: INFO
+        file: null
+    categorization:
+        auto_categorize: true
+        overwrite_existing: false
+    duplicates:
+        check_on_import: true
+        skip_duplicates: true
+
+Example:
+    >>> from finance_tracker.config import get_config
+    >>> 
+    >>> config = get_config()
+    >>> data_dir = config.get("data.directory")
+    >>> log_level = config.get("logging.level", "INFO")
+    >>> 
+    >>> # Set a value
+    >>> config.set("logging.level", "DEBUG")
+    >>> config.save()
+"""
 
 import logging
 from pathlib import Path

@@ -1,4 +1,38 @@
-"""Category mapping system for automatic transaction categorization."""
+"""
+Category mapping system for automatic transaction categorization.
+
+This module provides pattern-based categorization of transactions using regex rules.
+It includes 50+ default rules covering common spending categories and supports
+custom rules for user-specific needs.
+
+Categories are organized hierarchically (e.g., "Groceries" under "Food & Dining").
+Rules use regex patterns for flexible matching of transaction descriptions.
+
+Default Categories Include:
+    - Food & Dining: Groceries, Restaurants, Coffee Shops, Fast Food
+    - Transportation: Gas & Fuel, Rideshare, Parking, Public Transit
+    - Shopping: General Shopping, Clothing, Pharmacy
+    - Bills & Utilities: Electric, Water, Internet, Phone, Cable/TV
+    - Entertainment: Streaming Services, Movies, Events, Gaming
+    - Health & Fitness: Medical, Dental, Fitness, Pharmacy
+    - Income: Salary, Other Income, Refunds
+    - And more...
+
+Example:
+    >>> from finance_tracker.category_mapper import CategoryMapper
+    >>> 
+    >>> mapper = CategoryMapper()
+    >>> category = mapper.categorize("GROCERY STORE #1234")
+    >>> print(category.name)  # "Groceries"
+    >>> print(category.parent)  # "Food & Dining"
+    
+    >>> # Add custom rule
+    >>> mapper.add_custom_rule(
+    ...     r"(?i)\\b(custom.?merchant)\\b",
+    ...     "Custom Category",
+    ...     "Custom Parent"
+    ... )
+"""
 
 import re
 from dataclasses import dataclass

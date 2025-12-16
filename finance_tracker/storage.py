@@ -1,7 +1,46 @@
-"""Data storage layer for transactions and categories."""
+"""
+Data storage layer for transactions and categories.
+
+This module provides persistence for transactions and categories using JSON-based
+file storage. It implements the repository pattern, making it easy to migrate to
+database storage in the future.
+
+Components:
+    - TransactionRepository: Save/load transactions with duplicate detection
+    - CategoryRepository: Save/load custom categories
+    - StorageManager: Unified interface for all storage operations
+
+Storage Location:
+    Default: ~/.finance-tracker/
+    - transactions.json: All stored transactions
+    - categories.json: Custom categories
+    - exports/: Directory for exported data
+
+Features:
+    - Automatic duplicate detection and prevention
+    - Transaction fingerprinting for uniqueness
+    - JSON and CSV export formats
+    - Data validation on load
+
+Example:
+    >>> from finance_tracker.storage import StorageManager
+    >>> from pathlib import Path
+    >>> 
+    >>> storage = StorageManager(data_dir=Path.home() / ".finance-tracker")
+    >>> 
+    >>> # Transactions are automatically saved during workflow processing
+    >>> # Or manually:
+    >>> storage.transaction_repo.save(transactions)
+    >>> loaded = storage.transaction_repo.load_all()
+    >>> 
+    >>> # Export data
+    >>> storage.export_transactions_json(Path("export.json"))
+    >>> storage.export_transactions_csv(Path("export.csv"))
+"""
 
 import json
 import logging
+import uuid
 from datetime import date
 from decimal import Decimal
 from pathlib import Path
@@ -53,6 +92,9 @@ class TransactionRepository:
             # Add new transactions (avoid duplicates)
             new_transactions = []
             for transaction in transactions:
+                # Generate ID if not present
+                if not transaction.id:
+                    transaction.id = str(uuid.uuid4())
                 txn_id = self.transaction_id(transaction)
                 if txn_id not in existing_ids:
                     new_transactions.append(transaction)
@@ -148,24 +190,139 @@ class TransactionRepository:
 
         return duplicates
 
+    def get_by_id(self, transaction_id: str) -> Optional[Transaction]:
+        """
+        Get a transaction by its ID.
+
+        Args:
+            transaction_id: Transaction ID
+
+        Returns:
+            Transaction if found, None otherwise
+        """
+        transactions = self.load_all()
+        for transaction in transactions:
+            if transaction.id == transaction_id:
+                return transaction
+        return None
+
+    def update(self, transaction: Transaction) -> bool:
+        """
+        Update an existing transaction.
+
+        Args:
+            transaction: Updated transaction (must have an ID)
+
+        Returns:
+            True if updated, False if transaction not found
+        """
+        if not transaction.id:
+            raise ValueError("Transaction must have an ID to update")
+
+        transactions = self.load_all()
+        updated = False
+
+        for i, txn in enumerate(transactions):
+            if txn.id == transaction.id:
+                transactions[i] = transaction
+                updated = True
+                break
+
+        if updated:
+            self._save_all(transactions)
+            logger.info(f"Updated transaction {transaction.id}")
+
+        return updated
+
+    def delete(self, transaction_id: str) -> bool:
+        """
+        Delete a transaction by ID.
+
+        Args:
+            transaction_id: Transaction ID to delete
+
+        Returns:
+            True if deleted, False if not found
+        """
+        transactions = self.load_all()
+        original_count = len(transactions)
+        transactions = [t for t in transactions if t.id != transaction_id]
+
+        if len(transactions) < original_count:
+            self._save_all(transactions)
+            logger.info(f"Deleted transaction {transaction_id}")
+            return True
+
+        return False
+
+    def delete_multiple(self, transaction_ids: List[str]) -> int:
+        """
+        Delete multiple transactions.
+
+        Args:
+            transaction_ids: List of transaction IDs to delete
+
+        Returns:
+            Number of transactions deleted
+        """
+        transactions = self.load_all()
+        original_count = len(transactions)
+        transaction_ids_set = set(transaction_ids)
+        transactions = [t for t in transactions if t.id not in transaction_ids_set]
+
+        deleted_count = original_count - len(transactions)
+        if deleted_count > 0:
+            self._save_all(transactions)
+            logger.info(f"Deleted {deleted_count} transactions")
+
+        return deleted_count
+
+    def _save_all(self, transactions: List[Transaction]) -> None:
+        """Internal method to save all transactions."""
+        data = {
+            "transactions": [
+                self._serialize_transaction(t) for t in transactions
+            ]
+        }
+        with open(self.transactions_file, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2, cls=JSONEncoder)
+
     def transaction_id(self, transaction: Transaction) -> str:
         """
         Generate a unique identifier for a transaction.
+
+        Creates a fingerprint using key transaction attributes to uniquely identify
+        a transaction. This is used for duplicate detection.
+
+        The fingerprint includes:
+        - Date (ISO format)
+        - Amount (exact match required)
+        - Description (normalized to lowercase)
+        - Reference number (if available)
+
+        Two transactions with the same fingerprint are considered duplicates.
 
         Args:
             transaction: Transaction to identify
 
         Returns:
-            Unique identifier string
+            Unique identifier string (pipe-separated values)
+
+        Example:
+            >>> repo.transaction_id(transaction)
+            '2024-01-15|-50.00|grocery store #1234|REF123'
         """
-        # Use date, amount, description, and reference to create unique ID
+        # Build fingerprint from key attributes
+        # Date and amount are most important for uniqueness
         parts = [
-            transaction.date.isoformat(),
-            str(transaction.amount),
-            transaction.description.strip().lower(),
+            transaction.date.isoformat(),  # ISO format for consistency
+            str(transaction.amount),  # Exact amount match
+            transaction.description.strip().lower(),  # Normalized description
         ]
+        # Add reference if available (some banks include transaction IDs)
         if transaction.reference:
             parts.append(transaction.reference)
+        # Use pipe separator (unlikely to appear in transaction data)
         return "|".join(parts)
 
     def _transaction_id(self, transaction: Transaction) -> str:
@@ -200,6 +357,18 @@ class TransactionRepository:
         if transaction.notes:
             data["notes"] = transaction.notes
 
+        if transaction.id:
+            data["id"] = transaction.id
+
+        if transaction.is_recurring:
+            data["is_recurring"] = transaction.is_recurring
+
+        if transaction.recurring_id:
+            data["recurring_id"] = transaction.recurring_id
+
+        if transaction.parent_transaction_id:
+            data["parent_transaction_id"] = transaction.parent_transaction_id
+
         return data
 
     def _deserialize_transaction(self, data: Dict) -> Transaction:
@@ -225,6 +394,10 @@ class TransactionRepository:
             reference=data.get("reference"),
             balance=Decimal(data["balance"]) if data.get("balance") else None,
             notes=data.get("notes"),
+            id=data.get("id"),
+            is_recurring=data.get("is_recurring", False),
+            recurring_id=data.get("recurring_id"),
+            parent_transaction_id=data.get("parent_transaction_id"),
         )
 
 

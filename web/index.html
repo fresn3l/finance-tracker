@@ -16,6 +16,9 @@
                 <button class="tab-btn active" data-tab="dashboard">Dashboard</button>
                 <button class="tab-btn" data-tab="transactions">Transactions</button>
                 <button class="tab-btn" data-tab="categories">Categories</button>
+                <button class="tab-btn" data-tab="budgets">Budgets</button>
+                <button class="tab-btn" data-tab="recurring">Recurring</button>
+                <button class="tab-btn" data-tab="rules">Rules</button>
                 <button class="tab-btn" data-tab="import">Import</button>
             </nav>
         </header>
@@ -63,6 +66,7 @@
             <div class="toolbar">
                 <div class="search-box">
                     <input type="text" id="search-input" placeholder="Search transactions...">
+                    <button class="btn btn-secondary btn-small" onclick="toggleAdvancedSearch()">Advanced</button>
                 </div>
                 <div class="filters">
                     <select id="category-filter">
@@ -75,22 +79,62 @@
                     </select>
                     <input type="month" id="month-filter" placeholder="Filter by month">
                 </div>
-                <button class="btn btn-primary" onclick="exportTransactions()">Export</button>
+                <div class="transaction-actions">
+                    <button class="btn btn-secondary" onclick="bulkEditTransactions()">Bulk Edit</button>
+                    <button class="btn btn-danger" onclick="bulkDeleteTransactions()">Delete Selected</button>
+                    <button class="btn btn-primary" onclick="exportTransactions()">Export</button>
+                </div>
+            </div>
+            <div id="advanced-search" class="advanced-search-panel" style="display: none;">
+                <h3>Advanced Search</h3>
+                <div class="search-fields">
+                    <div class="form-group">
+                        <label>Date From</label>
+                        <input type="date" id="search-date-from">
+                    </div>
+                    <div class="form-group">
+                        <label>Date To</label>
+                        <input type="date" id="search-date-to">
+                    </div>
+                    <div class="form-group">
+                        <label>Amount Min</label>
+                        <input type="number" step="0.01" id="search-amount-min">
+                    </div>
+                    <div class="form-group">
+                        <label>Amount Max</label>
+                        <input type="number" step="0.01" id="search-amount-max">
+                    </div>
+                    <div class="form-group">
+                        <label>Account</label>
+                        <select id="search-account">
+                            <option value="">All Accounts</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>
+                            <input type="checkbox" id="search-recurring"> Recurring Only
+                        </label>
+                    </div>
+                </div>
+                <button class="btn btn-primary" onclick="applyAdvancedSearch()">Apply Search</button>
+                <button class="btn btn-secondary" onclick="clearAdvancedSearch()">Clear</button>
             </div>
             <div class="transactions-table-container">
                 <table class="transactions-table">
                     <thead>
                         <tr>
+                            <th><input type="checkbox" id="select-all-transactions" onchange="toggleSelectAll()"></th>
                             <th>Date</th>
                             <th>Description</th>
                             <th>Category</th>
                             <th>Amount</th>
                             <th>Type</th>
+                            <th>Actions</th>
                         </tr>
                     </thead>
                     <tbody id="transactions-tbody">
                         <tr>
-                            <td colspan="5" class="empty-state">No transactions found. Import a CSV file to get started.</td>
+                            <td colspan="7" class="empty-state">No transactions found. Import a CSV file to get started.</td>
                         </tr>
                     </tbody>
                 </table>
@@ -149,10 +193,199 @@
             </div>
         </div>
 
+        <!-- Budgets Tab -->
+        <div id="budgets" class="tab-content">
+            <div class="budgets-header">
+                <h2>Budget Management</h2>
+                <div class="budget-controls">
+                    <select id="budget-month-select">
+                        <option value="1">January</option>
+                        <option value="2">February</option>
+                        <option value="3">March</option>
+                        <option value="4">April</option>
+                        <option value="5">May</option>
+                        <option value="6">June</option>
+                        <option value="7">July</option>
+                        <option value="8">August</option>
+                        <option value="9">September</option>
+                        <option value="10">October</option>
+                        <option value="11">November</option>
+                        <option value="12">December</option>
+                    </select>
+                    <input type="number" id="budget-year-input" placeholder="Year" value="2024">
+                    <button class="btn btn-primary" onclick="loadBudgets()">Load</button>
+                    <button class="btn btn-secondary" onclick="showBudgetTemplateModal()">Templates</button>
+                </div>
+            </div>
+
+            <div class="budgets-grid">
+                <div class="budget-list-card">
+                    <h3>Category Budgets</h3>
+                    <button class="btn btn-primary btn-small" onclick="showAddBudgetModal()">+ Add Budget</button>
+                    <div id="budgets-list"></div>
+                </div>
+                <div class="budget-alerts-card">
+                    <h3>Budget Alerts</h3>
+                    <div id="budget-alerts"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Recurring Transactions Tab -->
+        <div id="recurring" class="tab-content">
+            <div class="recurring-header">
+                <h2>Recurring Transactions</h2>
+                <div class="recurring-controls">
+                    <button class="btn btn-primary" onclick="detectRecurring()">Detect Recurring</button>
+                    <button class="btn btn-secondary" onclick="markRecurring()">Mark as Recurring</button>
+                </div>
+            </div>
+            <div class="recurring-list" id="recurring-list"></div>
+        </div>
+
+        <!-- Category Rules Tab -->
+        <div id="rules" class="tab-content">
+            <div class="rules-header">
+                <h2>Category Rules Management</h2>
+                <div class="rules-controls">
+                    <button class="btn btn-primary" onclick="showAddRuleModal()">+ Add Rule</button>
+                    <button class="btn btn-secondary" onclick="exportRules()">Export Rules</button>
+                    <button class="btn btn-secondary" onclick="importRules()">Import Rules</button>
+                </div>
+            </div>
+            <div class="rules-list" id="rules-list"></div>
+        </div>
+
         <!-- Loading Overlay -->
         <div id="loading-overlay" class="loading-overlay" style="display: none;">
             <div class="spinner"></div>
             <p>Processing...</p>
+        </div>
+    </div>
+
+    <!-- Modals -->
+    <!-- Edit Transaction Modal -->
+    <div id="edit-transaction-modal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('edit-transaction-modal')">&times;</span>
+            <h2>Edit Transaction</h2>
+            <form id="edit-transaction-form">
+                <input type="hidden" id="edit-txn-id">
+                <div class="form-group">
+                    <label>Description</label>
+                    <input type="text" id="edit-txn-description" required>
+                </div>
+                <div class="form-group">
+                    <label>Amount</label>
+                    <input type="number" step="0.01" id="edit-txn-amount" required>
+                </div>
+                <div class="form-group">
+                    <label>Date</label>
+                    <input type="date" id="edit-txn-date" required>
+                </div>
+                <div class="form-group">
+                    <label>Category</label>
+                    <input type="text" id="edit-txn-category" placeholder="Category name">
+                </div>
+                <div class="form-group">
+                    <label>Parent Category</label>
+                    <input type="text" id="edit-txn-category-parent" placeholder="Parent category (optional)">
+                </div>
+                <div class="form-group">
+                    <label>Notes</label>
+                    <textarea id="edit-txn-notes" rows="3"></textarea>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal('edit-transaction-modal')">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Add Budget Modal -->
+    <div id="add-budget-modal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('add-budget-modal')">&times;</span>
+            <h2>Add Budget</h2>
+            <form id="add-budget-form">
+                <div class="form-group">
+                    <label>Category</label>
+                    <input type="text" id="budget-category" required>
+                </div>
+                <div class="form-group">
+                    <label>Amount</label>
+                    <input type="number" step="0.01" id="budget-amount" required>
+                </div>
+                <div class="form-group">
+                    <label>Alert Threshold (%)</label>
+                    <input type="number" step="1" min="0" max="100" id="budget-alert-threshold" value="80">
+                </div>
+                <div class="form-group">
+                    <label>Notes</label>
+                    <textarea id="budget-notes" rows="3"></textarea>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal('add-budget-modal')">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Add Rule Modal -->
+    <div id="add-rule-modal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('add-rule-modal')">&times;</span>
+            <h2>Add Category Rule</h2>
+            <form id="add-rule-form">
+                <div class="form-group">
+                    <label>Pattern (Regex)</label>
+                    <input type="text" id="rule-pattern" placeholder="e.g., (?i)\\b(grocery|supermarket)\\b" required>
+                    <small>Use regex pattern to match transaction descriptions</small>
+                </div>
+                <div class="form-group">
+                    <label>Category Name</label>
+                    <input type="text" id="rule-category" required>
+                </div>
+                <div class="form-group">
+                    <label>Parent Category</label>
+                    <input type="text" id="rule-parent" placeholder="Optional">
+                </div>
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="rule-case-sensitive"> Case Sensitive
+                    </label>
+                </div>
+                <div class="form-group">
+                    <label>Test Pattern</label>
+                    <textarea id="rule-test-strings" rows="3" placeholder="Enter test strings, one per line"></textarea>
+                    <button type="button" class="btn btn-secondary btn-small" onclick="testRulePattern()">Test</button>
+                    <div id="rule-test-results"></div>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal('add-rule-modal')">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Add Rule</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Split Transaction Modal -->
+    <div id="split-transaction-modal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('split-transaction-modal')">&times;</span>
+            <h2>Split Transaction</h2>
+            <div id="split-txn-info"></div>
+            <form id="split-transaction-form">
+                <input type="hidden" id="split-txn-id">
+                <div id="split-entries"></div>
+                <button type="button" class="btn btn-secondary btn-small" onclick="addSplitEntry()">+ Add Split</button>
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal('split-transaction-modal')">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Split Transaction</button>
+                </div>
+            </form>
         </div>
     </div>
 

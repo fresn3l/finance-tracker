@@ -1,4 +1,32 @@
-"""CSV parser for bank statement files."""
+"""
+CSV parser for bank statement files.
+
+This module provides functionality to parse bank statement CSV files in multiple formats.
+It automatically detects the CSV format and converts rows into Transaction objects.
+
+Supported Formats:
+    1. Standard Format: Date, Description, Amount, Balance
+    2. Alternative Format: Transaction Date, Post Date, Description, Category, Type, Amount
+    3. Debit/Credit Format: Date, Description, Debit, Credit, Balance
+
+The parser handles:
+- Automatic format detection
+- Flexible date parsing (ISO, US, European formats)
+- Amount parsing with currency symbols and commas
+- Error handling with row-level reporting
+
+Example:
+    >>> from finance_tracker.csv_parser import parse_csv
+    >>> from pathlib import Path
+    >>> 
+    >>> transactions = parse_csv(Path("bank_statement.csv"))
+    >>> print(f"Parsed {len(transactions)} transactions")
+    
+    >>> from finance_tracker.csv_parser import CSVParser
+    >>> parser = CSVParser(account="CHECKING-123")
+    >>> format_type = parser.detect_format(Path("statement.csv"))
+    >>> transactions = parser.parse(Path("statement.csv"))
+"""
 
 import csv
 from datetime import date, datetime
@@ -308,7 +336,12 @@ class CSVParser:
         """
         Parse date string into date object.
 
-        Supports formats: YYYY-MM-DD, MM/DD/YYYY, DD/MM/YYYY
+        Supports multiple date formats commonly used in bank statements:
+        - ISO format: YYYY-MM-DD (e.g., "2024-01-15")
+        - US format: MM/DD/YYYY (e.g., "01/15/2024")
+        - European format: DD/MM/YYYY (e.g., "15/01/2024")
+
+        The method tries formats in order until one succeeds.
 
         Args:
             date_str: Date string to parse
@@ -317,50 +350,72 @@ class CSVParser:
             Parsed date object
 
         Raises:
-            ValueError: If date cannot be parsed
+            ValueError: If date cannot be parsed in any supported format
+
+        Example:
+            >>> CSVParser._parse_date("2024-01-15")
+            datetime.date(2024, 1, 15)
+            >>> CSVParser._parse_date("01/15/2024")
+            datetime.date(2024, 1, 15)
         """
         date_str = date_str.strip()
 
-        # Try ISO format first (YYYY-MM-DD)
+        # Try ISO format first (YYYY-MM-DD) - most common in modern exports
         try:
             return datetime.strptime(date_str, "%Y-%m-%d").date()
         except ValueError:
             pass
 
-        # Try MM/DD/YYYY
+        # Try US format (MM/DD/YYYY) - common in US bank statements
         try:
             return datetime.strptime(date_str, "%m/%d/%Y").date()
         except ValueError:
             pass
 
-        # Try DD/MM/YYYY
+        # Try European format (DD/MM/YYYY) - common in European bank statements
         try:
             return datetime.strptime(date_str, "%d/%m/%Y").date()
         except ValueError:
             pass
 
-        raise ValueError(f"Unable to parse date: {date_str}")
+        # If all formats fail, raise an error with helpful message
+        raise ValueError(f"Unable to parse date: {date_str}. Supported formats: YYYY-MM-DD, MM/DD/YYYY, DD/MM/YYYY")
 
     @staticmethod
     def _parse_decimal(value_str: str) -> Decimal:
         """
         Parse decimal string into Decimal object.
 
-        Handles commas, dollar signs, and negative signs.
+        Handles various formatting commonly found in bank statements:
+        - Currency symbols: $, €, £
+        - Thousands separators: commas (1,234.56)
+        - Whitespace
+        - Negative signs: - or parentheses
+
+        Uses Decimal for precise monetary calculations (avoids floating-point errors).
 
         Args:
-            value_str: Decimal string to parse
+            value_str: Decimal string to parse (e.g., "$1,234.56", "-50.00")
 
         Returns:
             Parsed Decimal object
 
         Raises:
             ValueError: If value cannot be parsed
+
+        Example:
+            >>> CSVParser._parse_decimal("$1,234.56")
+            Decimal('1234.56')
+            >>> CSVParser._parse_decimal("-50.00")
+            Decimal('-50.00')
+            >>> CSVParser._parse_decimal("")
+            Decimal('0')
         """
         if not value_str or not value_str.strip():
             return Decimal("0")
 
-        # Remove common formatting
+        # Remove common formatting characters
+        # Order matters: remove $ before processing negative signs
         cleaned = value_str.strip().replace("$", "").replace(",", "").replace(" ", "")
 
         try:
