@@ -1,31 +1,107 @@
 """
 Data models for finance tracker application.
 
-This module defines the core data structures used throughout the application:
-- TransactionType: Enumeration of transaction types
-- Category: Spending categories with hierarchical support
-- Transaction: Individual financial transactions
-- MonthlySummary: Aggregated monthly statistics
-- SpendingPattern: Category-level spending analysis
+This module defines the core data structures (domain models) used throughout the application.
+These models represent the fundamental business entities and their relationships.
 
-All models use Pydantic v2 for validation, serialization, and type safety.
-Monetary values use Decimal to avoid floating-point precision issues.
+LEARNING GUIDE:
+===============
 
-Example:
+This module demonstrates several important software engineering concepts:
+
+1. **Domain Modeling**
+   - Models represent real-world financial concepts (transactions, categories, budgets)
+   - Each model has a clear, single responsibility
+   - Models are independent of how they're stored or displayed
+
+2. **Data Validation with Pydantic**
+   - Pydantic automatically validates data when models are created
+   - Type hints provide IDE support and catch errors early
+   - Field validators ensure business rules (e.g., amount cannot be zero)
+
+3. **Type Safety**
+   - Using Decimal for money prevents floating-point errors
+   - Optional types clearly indicate what data is required vs. optional
+   - Enums provide type-safe constants
+
+4. **Immutability**
+   - Categories are frozen (immutable) to prevent accidental changes
+   - This ensures data integrity and makes code easier to reason about
+
+5. **Computed Properties**
+   - Properties like `is_expense` and `savings_rate` are computed from other fields
+   - This keeps business logic close to the data it operates on
+
+MODEL OVERVIEW:
+===============
+
+TransactionType (Enum):
+    Represents the three types of financial transactions:
+    - DEBIT: Money going out (expenses)
+    - CREDIT: Money coming in (income)
+    - TRANSFER: Internal transfers between accounts
+
+Category:
+    A spending category with optional hierarchical organization.
+    Categories are immutable once created to prevent accidental changes.
+    
+    Example: "Groceries" under parent "Food & Dining"
+
+Transaction:
+    The core entity representing a single financial transaction.
+    Contains all metadata: date, amount, description, category, etc.
+    Uses Decimal for precise monetary calculations.
+
+MonthlySummary:
+    Aggregated statistics for a specific month.
+    Calculates totals, net amounts, and category breakdowns.
+
+SpendingPattern:
+    Analysis results showing spending patterns for a category.
+    Includes statistics like average, min, max, and trends.
+
+Budget:
+    A monthly budget set for a specific category.
+    Tracks spending against the budget with alert thresholds.
+
+BudgetTemplate:
+    A reusable template for setting up multiple budgets at once.
+
+RecurringTransaction:
+    Represents a detected pattern of recurring transactions
+    (e.g., monthly subscriptions, weekly bills).
+
+SplitTransaction:
+    Represents a portion of a transaction split across multiple categories.
+
+USAGE EXAMPLE:
+==============
+
     >>> from finance_tracker.models import Transaction, TransactionType, Category
     >>> from datetime import date
     >>> from decimal import Decimal
     >>> 
+    >>> # Create a category (immutable)
     >>> category = Category(name="Groceries", parent="Food & Dining")
+    >>> 
+    >>> # Create a transaction
     >>> transaction = Transaction(
     ...     date=date(2024, 1, 15),
-    ...     amount=Decimal("-50.00"),
-    ...     description="Grocery Store",
+    ...     amount=Decimal("-50.00"),  # Negative = expense
+    ...     description="Whole Foods Market",
     ...     transaction_type=TransactionType.DEBIT,
     ...     category=category
     ... )
-    >>> print(transaction.is_expense)
-    True
+    >>> 
+    >>> # Use computed properties
+    >>> print(transaction.is_expense)  # True
+    >>> print(transaction.absolute_amount)  # Decimal('50.00')
+    >>> 
+    >>> # Validation works automatically
+    >>> try:
+    ...     Transaction(amount=Decimal("0"), ...)  # This will raise ValueError
+    ... except ValueError as e:
+    ...     print(f"Validation error: {e}")
 """
 
 from __future__ import annotations
@@ -70,10 +146,6 @@ class Transaction(BaseModel):
     reference: Optional[str] = Field(None, description="Transaction reference number")
     balance: Optional[Decimal] = Field(None, description="Account balance after transaction")
     notes: Optional[str] = Field(None, description="User-added notes")
-    id: Optional[str] = Field(None, description="Unique transaction identifier")
-    is_recurring: bool = Field(default=False, description="Whether this is a recurring transaction")
-    recurring_id: Optional[str] = Field(None, description="ID of recurring transaction group")
-    parent_transaction_id: Optional[str] = Field(None, description="ID of parent transaction if this is a split")
     id: Optional[str] = Field(None, description="Unique transaction identifier")
     is_recurring: bool = Field(default=False, description="Whether this is a recurring transaction")
     recurring_id: Optional[str] = Field(None, description="ID of recurring transaction group")

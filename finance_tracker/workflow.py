@@ -51,19 +51,110 @@ logger = logging.getLogger(__name__)
 
 
 class FinanceTrackerWorkflow:
-    """End-to-end workflow for processing financial transactions."""
+    """
+    End-to-end workflow orchestrator for processing financial transactions.
+    
+    WHAT IT DOES:
+    =============
+    
+    This class coordinates the complete workflow of importing and processing CSV files:
+    
+    1. **Parse CSV**: Convert CSV file to Transaction objects
+    2. **Detect Duplicates**: Check against existing transactions
+    3. **Categorize**: Automatically assign categories
+    4. **Store**: Save transactions to persistent storage
+    5. **Analyze**: Provide analysis capabilities
+    
+    WORKFLOW PATTERN:
+    =================
+    
+    This class implements the Workflow/Orchestrator pattern:
+    - Coordinates multiple operations into a single workflow
+    - Handles errors at the workflow level
+    - Provides a high-level API for common tasks
+    - Abstracts complexity from the user
+    
+    WHY USE A WORKFLOW?
+    ===================
+    
+    - **Simplicity**: One method call does everything
+    - **Consistency**: Same steps every time
+    - **Error Handling**: Centralized error handling
+    - **Logging**: Track progress through the workflow
+    - **Testability**: Easy to test the complete flow
+    
+    EXAMPLE WORKFLOW:
+    =================
+    
+    ```
+    CSV File
+      ↓
+    [Parse] → Transaction objects (uncategorized)
+      ↓
+    [Check Duplicates] → Filter out duplicates
+      ↓
+    [Categorize] → Transaction objects (categorized)
+      ↓
+    [Store] → Saved to disk
+      ↓
+    [Analyze] → Reports and insights
+    ```
+    
+    LEARNING POINTS:
+    ================
+    
+    1. **Orchestration**: How to coordinate multiple operations
+    2. **Error Handling**: Handle errors gracefully at workflow level
+    3. **Dependency Injection**: Components are injected, not hardcoded
+    4. **Separation of Concerns**: Workflow doesn't do the work, it coordinates
+    
+    Example:
+        >>> workflow = FinanceTrackerWorkflow()
+        >>> transactions, stats = workflow.process_csv_file(
+        ...     Path("bank_statement.csv"),
+        ...     auto_categorize=True
+        ... )
+        >>> print(f"Imported {stats['new_transactions']} transactions")
+    """
 
     def __init__(self, data_dir: Optional[Path] = None, account: Optional[str] = None):
         """
-        Initialize workflow.
+        Initialize workflow with all necessary components.
+        
+        COMPONENT INITIALIZATION:
+        ==========================
+        
+        This constructor sets up all the components needed for the workflow:
+        
+        - **StorageManager**: Handles data persistence
+        - **CSVParser**: Parses CSV files into transactions
+        - **TransactionCategorizer**: Categorizes transactions
+        
+        WHY DEPENDENCY INJECTION?
+        =========================
+        
+        Components are created here, but could be injected for testing:
+        - Makes testing easier (can inject mock objects)
+        - Makes components reusable
+        - Follows dependency inversion principle
 
         Args:
-            data_dir: Optional data directory
+            data_dir: Optional data directory for storage
+                     If None, uses default from configuration
             account: Optional account identifier
+                     Useful when tracking multiple accounts
         """
+        # Initialize storage manager (handles all data persistence)
         self.storage = StorageManager(data_dir)
+        
+        # Store account identifier for transactions
         self.account = account
+        
+        # Initialize CSV parser with account identifier
+        # This ensures all parsed transactions get the account name
         self.parser = CSVParser(account=account)
+        
+        # Initialize categorizer (uses default category rules)
         self.categorizer = TransactionCategorizer()
 
     def process_csv_file(
@@ -75,26 +166,84 @@ class FinanceTrackerWorkflow:
         skip_duplicates: bool = True,
     ) -> tuple[List[Transaction], dict]:
         """
-        Process a CSV file: parse, categorize, and store.
-
+        Process a CSV file through the complete workflow.
+        
+        COMPLETE WORKFLOW:
+        ==================
+        
+        This method implements the complete end-to-end workflow:
+        
+        Step 1: Parse CSV File
+        - Detects CSV format automatically
+        - Converts rows to Transaction objects
+        - Handles format-specific parsing
+        
+        Step 2: Duplicate Detection (optional)
+        - Compares new transactions against stored ones
+        - Uses transaction fingerprinting for comparison
+        - Filters out duplicates if skip_duplicates=True
+        
+        Step 3: Categorization (optional)
+        - Automatically assigns categories using rules
+        - Can overwrite existing categories or preserve them
+        - Tracks categorization statistics
+        
+        Step 4: Storage
+        - Saves transactions to persistent storage
+        - Only saves new transactions (duplicates already filtered)
+        - Updates storage with categorized transactions
+        
+        Step 5: Statistics
+        - Returns statistics about the import
+        - Includes counts, categorization rates, etc.
+        
+        ERROR HANDLING:
+        ===============
+        
+        - Errors are logged but don't stop the workflow
+        - Partial results are returned if some steps fail
+        - Descriptive error messages help with debugging
+        
         Args:
-            csv_file: Path to CSV file
-            auto_categorize: Whether to automatically categorize transactions
-            overwrite_categories: Whether to overwrite existing categories
-            check_duplicates: Whether to check for duplicates
-            skip_duplicates: Whether to skip duplicate transactions
+            csv_file: Path to CSV file to process
+            auto_categorize: If True, automatically categorize transactions
+                           If False, transactions remain uncategorized
+            overwrite_categories: If True, overwrite existing categories
+                                If False, preserve existing categories
+            check_duplicates: If True, check for duplicate transactions
+            skip_duplicates: If True, skip duplicate transactions
+                           If False, include duplicates (not recommended)
 
         Returns:
-            Tuple of (processed transactions, statistics dict)
+            Tuple containing:
+            - List of processed transactions
+            - Dictionary with statistics:
+              * new_transactions: Number of new transactions added
+              * duplicates_found: Number of duplicates found
+              * categorized: Number of transactions categorized
+              * categorization_rate: Percentage successfully categorized
+              
+        Example:
+            >>> workflow = FinanceTrackerWorkflow()
+            >>> transactions, stats = workflow.process_csv_file(
+            ...     Path("statement.csv"),
+            ...     auto_categorize=True,
+            ...     check_duplicates=True
+            ... )
+            >>> print(f"Imported {stats['new_transactions']} new transactions")
+            >>> print(f"Categorized {stats['categorized']} transactions")
         """
         logger.info(f"Processing CSV file: {csv_file}")
 
-        # Parse CSV
+        # STEP 1: Parse CSV file
+        # This converts the CSV file into Transaction objects
+        # The parser automatically detects the format and uses the appropriate strategy
         logger.info("Parsing CSV file...")
         transactions = self.parser.parse(csv_file)
         logger.info(f"Parsed {len(transactions)} transactions")
 
-        # Check for duplicates
+        # STEP 2: Check for duplicates (if enabled)
+        # This prevents importing the same transaction twice
         duplicates = []
         if check_duplicates:
             duplicates = self.storage.transaction_repo.check_duplicates(transactions)

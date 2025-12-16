@@ -221,57 +221,179 @@ class BudgetRepository:
 
 
 class BudgetTracker:
-    """Budget tracking and analysis engine."""
+    """
+    Budget tracking and analysis engine.
+    
+    WHAT IT DOES:
+    =============
+    
+    This class provides budget management and tracking functionality:
+    
+    1. **Budget Status**: Compare spending vs. budget for categories
+    2. **Budget Alerts**: Identify when budgets are approaching or exceeded
+    3. **Progress Tracking**: Calculate percentage spent, remaining amount
+    4. **Multi-Category**: Track budgets for multiple categories simultaneously
+    
+    HOW IT WORKS:
+    =============
+    
+    The tracker combines budget data with transaction data:
+    
+    1. **Load Budget**: Get budget for a category/month from repository
+    2. **Calculate Spending**: Sum actual spending from transactions
+    3. **Compare**: Calculate difference, percentage, status
+    4. **Generate Alerts**: Identify when thresholds are reached
+    
+    BUDGET STATUS CALCULATION:
+    ==========================
+    
+    For each budget:
+    - Spent = sum of transactions in that category for the month
+    - Remaining = Budget - Spent
+    - Percentage = (Spent / Budget) * 100
+    - Alert Threshold = Budget * alert_threshold (default 80%)
+    - Should Alert = Spent >= Alert Threshold
+    - Over Budget = Spent > Budget
+    
+    LEARNING POINTS:
+    ================
+    
+    1. **Data Aggregation**: Sum transactions by category and month
+    2. **Comparison Logic**: Compare actual vs. planned spending
+    3. **Threshold Detection**: Identify when alerts should trigger
+    4. **Status Reporting**: Provide clear status information
+    
+    Example:
+        >>> tracker = BudgetTracker(transactions, budget_repo)
+        >>> status = tracker.get_budget_status("Groceries", 2024, 1)
+        >>> print(f"Spent: ${status['spent']} of ${status['budget']}")
+        >>> print(f"Remaining: ${status['remaining']}")
+        >>> if status['should_alert']:
+        ...     print("⚠️ Budget alert!")
+    """
 
     def __init__(
         self, transactions: List[Transaction], budget_repo: BudgetRepository
     ):
         """
-        Initialize budget tracker.
+        Initialize budget tracker with transactions and budget repository.
 
         Args:
             transactions: List of transactions to analyze
+                         Used to calculate actual spending
             budget_repo: Budget repository
+                        Used to load budget data
         """
         self.transactions = transactions
         self.budget_repo = budget_repo
+        
+        # Use SpendingAnalyzer for category breakdown calculations
+        # This reuses existing analysis logic rather than duplicating it
         self.analyzer = SpendingAnalyzer(transactions)
 
     def get_budget_status(
         self, category_name: str, year: int, month: int
     ) -> Dict:
         """
-        Get budget status for a category and month.
+        Get budget status for a specific category and month.
+        
+        BUDGET STATUS CALCULATION:
+        ==========================
+        
+        This method calculates the current status of a budget by comparing
+        the budgeted amount with actual spending:
+        
+        1. **Load Budget**: Get budget for category/month
+        2. **Calculate Spending**: Sum actual transactions in that category
+        3. **Calculate Metrics**:
+           - Percentage spent: (spent / budget) * 100
+           - Remaining: budget - spent
+           - Alert threshold: budget * alert_threshold (e.g., 80%)
+        4. **Determine Status**:
+           - Should alert: spent >= alert threshold
+           - Over budget: spent > budget
+        
+        STATUS INDICATORS:
+        ==================
+        
+        - **has_budget**: Whether a budget exists for this category/month
+        - **percentage_spent**: How much of the budget has been used (0-100%)
+        - **remaining**: How much budget is left (can be negative if over budget)
+        - **should_alert**: Whether to show an alert (spent >= threshold)
+        - **over_budget**: Whether spending exceeds the budget
+        
+        EXAMPLE:
+        ========
+        
+        Budget: $500 for Groceries in January
+        Spent: $400
+        
+        Result:
+        - percentage_spent: 80%
+        - remaining: $100
+        - should_alert: True (if threshold is 80%)
+        - over_budget: False
+        
+        If spent: $550
+        - percentage_spent: 110%
+        - remaining: -$50 (negative = over budget)
+        - should_alert: True
+        - over_budget: True
 
         Args:
-            category_name: Category name
-            year: Year
-            month: Month
+            category_name: Name of the category to check
+            year: Year to check (e.g., 2024)
+            month: Month to check (1-12)
 
         Returns:
-            Dictionary with budget status information
+            Dictionary with budget status:
+            - has_budget: bool - Whether budget exists
+            - budget: str - Budget amount (if exists)
+            - spent: str - Actual spending (if exists)
+            - remaining: str - Remaining budget (if exists)
+            - percentage_spent: float - Percentage of budget used (if exists)
+            - alert_threshold: str - Alert threshold amount (if exists)
+            - should_alert: bool - Whether to alert (if exists)
+            - over_budget: bool - Whether over budget (if exists)
         """
+        # Step 1: Load budget from repository
+        # Returns None if no budget exists for this category/month
         budget = self.budget_repo.get_budget(category_name, year, month)
         if not budget:
+            # No budget set - return simple status
             return {"has_budget": False}
 
-        # Get actual spending
+        # Step 2: Calculate actual spending for this category/month
+        # Uses SpendingAnalyzer to get category breakdown
+        # This reuses existing analysis logic
         breakdown = self.analyzer.get_category_breakdown(year=year, month=month)
+        
+        # Get spending for this category (default to 0 if no transactions)
         spent = breakdown.get(category_name, Decimal("0"))
 
+        # Step 3: Calculate percentage spent
+        # Formula: (spent / budget) * 100
+        # Handle division by zero (shouldn't happen, but be safe)
         percentage_spent = float((spent / budget.amount) * 100) if budget.amount > 0 else 0
+        
+        # Step 4: Calculate remaining budget
+        # Can be negative if over budget
         remaining = budget.amount - spent
+        
+        # Step 5: Calculate alert threshold amount
+        # alert_threshold is a decimal (e.g., 0.8 = 80%)
         alert_threshold_amount = budget.amount * budget.alert_threshold
 
+        # Step 6: Return comprehensive status
         return {
             "has_budget": True,
-            "budget": str(budget.amount),
+            "budget": str(budget.amount),  # Convert Decimal to string for JSON
             "spent": str(spent),
             "remaining": str(remaining),
-            "percentage_spent": percentage_spent,
+            "percentage_spent": percentage_spent,  # Float for percentage
             "alert_threshold": str(alert_threshold_amount),
-            "should_alert": spent >= alert_threshold_amount,
-            "over_budget": spent > budget.amount,
+            "should_alert": spent >= alert_threshold_amount,  # Boolean
+            "over_budget": spent > budget.amount,  # Boolean
         }
 
     def get_all_budget_statuses(self, year: int, month: int) -> List[Dict]:

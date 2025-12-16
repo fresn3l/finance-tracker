@@ -8,6 +8,21 @@ This package provides functionality to:
 - Store and manage transaction data
 - Provide both CLI and web interfaces
 
+LEARNING RESOURCE:
+=================
+
+This codebase is designed to be educational. All modules include comprehensive
+documentation explaining:
+- What the code does
+- Why design decisions were made
+- How algorithms work
+- Learning points for understanding concepts
+
+Start with:
+- docs/LEARNING_GUIDE.md - Overview and key concepts
+- docs/CODE_WALKTHROUGH.md - Step-by-step data flow
+- docs/CODE_ORGANIZATION.md - Module structure
+
 Main Components:
 - models: Data models for transactions, categories, and summaries
 - csv_parser: CSV file parsing and format detection
@@ -16,6 +31,11 @@ Main Components:
 - analyzer: Spending analysis and reporting
 - storage: Data persistence layer
 - workflow: End-to-end processing workflows
+- transaction_editor: Transaction editing and management
+- budget_tracker: Budget tracking and alerts
+- recurring_detector: Recurring transaction detection
+- search_filter: Advanced search and filtering
+- category_rules_manager: Category rules management
 - cli: Command-line interface
 - web_app: Web application interface
 
@@ -24,6 +44,11 @@ Example Usage:
     >>> workflow = FinanceTrackerWorkflow()
     >>> transactions, stats = workflow.process_csv_file("bank_statement.csv")
     >>> print(f"Imported {stats['new_transactions']} transactions")
+    
+For detailed documentation, see:
+- docs/LEARNING_GUIDE.md
+- docs/CODE_WALKTHROUGH.md
+- Individual module docstrings
 """
 
 __version__ = "0.1.0"

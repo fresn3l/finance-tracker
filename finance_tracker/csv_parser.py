@@ -66,7 +66,62 @@ class InvalidDataError(CSVParserError):
 
 
 class CSVParser:
-    """Parser for bank statement CSV files."""
+    """
+    Parser for bank statement CSV files.
+    
+    This class handles the parsing of CSV files from various bank formats into
+    Transaction objects. It automatically detects the CSV format and uses the
+    appropriate parsing strategy.
+    
+    HOW IT WORKS:
+    =============
+    
+    1. Format Detection:
+       - Reads the CSV header row
+       - Compares header names against known patterns
+       - Returns the detected format type
+    
+    2. Parsing Strategy:
+       - Each format has its own parsing method
+       - Methods handle format-specific column names and structures
+       - Converts string data to proper types (dates, decimals)
+    
+    3. Error Handling:
+       - Row-level error reporting (tells you which row failed)
+       - Continues parsing even if some rows fail
+       - Raises descriptive errors for unsupported formats
+    
+    DESIGN PATTERNS USED:
+    =====================
+    
+    - Strategy Pattern: Different parsers for different formats
+    - Template Method: Common parsing flow with format-specific steps
+    - Error Handling: Graceful degradation (skip bad rows, continue parsing)
+    
+    LEARNING POINTS:
+    ================
+    
+    1. Why multiple format support?
+       - Different banks export CSV files differently
+       - Users shouldn't need to manually format their data
+       - Makes the application more user-friendly
+    
+    2. Why automatic detection?
+       - Users don't need to know their bank's format
+       - Reduces user error and support requests
+       - Makes the import process seamless
+    
+    3. Error handling strategy:
+       - Report errors at the row level (not fail completely)
+       - Continue parsing valid rows even if some fail
+       - Provide helpful error messages
+    
+    Example:
+        >>> parser = CSVParser(account="CHECKING-123")
+        >>> format_type = parser.detect_format(Path("statement.csv"))
+        >>> transactions = parser.parse(Path("statement.csv"))
+        >>> print(f"Parsed {len(transactions)} transactions")
+    """
 
     def __init__(self, account: Optional[str] = None):
         """
@@ -74,21 +129,42 @@ class CSVParser:
 
         Args:
             account: Optional account identifier to assign to all transactions
+                    This is useful when tracking multiple accounts (checking, savings, etc.)
         """
         self.account = account
 
     def detect_format(self, file_path: Path) -> CSVFormat:
         """
         Detect the format of a CSV file by examining headers.
-
+        
+        HOW IT WORKS:
+        =============
+        
+        This method uses a simple pattern matching approach:
+        
+        1. Opens the CSV file and reads just the header row
+        2. Normalizes header names (lowercase, strip whitespace)
+        3. Checks for key column names that identify each format:
+           - Alternative format: "Transaction Date" + "Type"
+           - Debit/Credit format: "Debit" + "Credit"
+           - Standard format: "Date" + "Amount" + "Description"
+        4. Returns the first matching format
+        
+        WHY THIS APPROACH:
+        ==================
+        
+        - Fast: Only reads one row (the header)
+        - Reliable: Column names are usually consistent within a format
+        - Extensible: Easy to add new format detection rules
+        
         Args:
             file_path: Path to CSV file
 
         Returns:
-            Detected CSV format
+            Detected CSV format (CSVFormat enum value)
 
         Raises:
-            CSVParserError: If file cannot be read
+            CSVParserError: If file cannot be read or has no headers
         """
         try:
             with open(file_path, "r", encoding="utf-8") as f:
@@ -148,7 +224,37 @@ class CSVParser:
         return parser(file_path)
 
     def _parse_standard(self, file_path: Path) -> List[Transaction]:
-        """Parse standard format CSV (Date, Description, Amount, Balance)."""
+        """
+        Parse standard format CSV (Date, Description, Amount, Balance).
+        
+        This is the most common CSV format used by banks. It typically looks like:
+        
+            Date,Description,Amount,Balance
+            2024-01-15,Grocery Store,-50.00,1000.00
+            2024-01-16,Salary Deposit,3000.00,4000.00
+        
+        PARSING PROCESS:
+        ================
+        
+        1. Open file and create CSV DictReader (reads rows as dictionaries)
+        2. For each row:
+           a. Parse date string to date object (handles multiple formats)
+           b. Parse amount string to Decimal (handles $, commas, etc.)
+           c. Determine transaction type from amount sign
+           d. Create Transaction object
+           e. Handle errors gracefully (skip bad rows, report errors)
+        3. Return list of successfully parsed transactions
+        
+        ERROR HANDLING:
+        ==============
+        
+        - Empty rows are skipped (no error)
+        - Zero-amount transactions are skipped (invalid data)
+        - Rows with missing required fields raise InvalidDataError with row number
+        - Other errors are caught and re-raised with context
+        
+        This ensures that one bad row doesn't prevent parsing the entire file.
+        """
         transactions = []
 
         try:

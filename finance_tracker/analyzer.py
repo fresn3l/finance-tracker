@@ -56,39 +56,119 @@ class SpendingAnalyzer:
     def get_monthly_summary(self, year: int, month: int) -> MonthlySummary:
         """
         Generate monthly summary for a specific month.
+        
+        MONTHLY SUMMARY CALCULATION:
+        ============================
+        
+        This method aggregates all transactions for a given month and calculates:
+        
+        1. **Total Income**: Sum of all income transactions
+        2. **Total Expenses**: Sum of all expense transactions
+        3. **Net Amount**: Income - Expenses (positive = savings, negative = deficit)
+        4. **Category Breakdown**: Spending by category
+        5. **Transaction Count**: Number of transactions in the month
+        
+        HOW IT WORKS:
+        =============
+        
+        Step 1: Filter transactions for the month
+        - Use list comprehension to filter by year and month
+        - This is efficient and readable
+        
+        Step 2: Initialize accumulators
+        - total_income: Starts at 0
+        - total_expenses: Starts at 0
+        - category_breakdown: Dictionary to track spending by category
+        
+        Step 3: Process each transaction
+        - If income: Add to total_income
+        - If expense: Add to total_expenses and category breakdown
+        
+        Step 4: Calculate net amount
+        - Simple subtraction: income - expenses
+        
+        Step 5: Create summary object
+        - MonthlySummary contains all calculated values
+        
+        WHY DEFAULTDICT?
+        ================
+        
+        `defaultdict(Decimal)` automatically creates Decimal("0") for new keys.
+        This makes it easy to accumulate category totals:
+        
+        ```python
+        category_breakdown["Groceries"] += amount  # Works even if "Groceries" doesn't exist yet
+        ```
+        
+        Without defaultdict, you'd need:
+        ```python
+        if "Groceries" not in category_breakdown:
+            category_breakdown["Groceries"] = Decimal("0")
+        category_breakdown["Groceries"] += amount
+        ```
 
         Args:
-            year: Year to analyze
-            month: Month to analyze (1-12)
+            year: Year to analyze (e.g., 2024)
+            month: Month to analyze (1-12, where 1=January, 12=December)
 
         Returns:
-            MonthlySummary object
+            MonthlySummary object containing:
+            - Total income for the month
+            - Total expenses for the month
+            - Net amount (income - expenses)
+            - Transaction count
+            - Category breakdown (spending by category)
+            
+        Example:
+            >>> analyzer = SpendingAnalyzer(transactions)
+            >>> summary = analyzer.get_monthly_summary(2024, 1)
+            >>> print(f"Income: ${summary.total_income}")
+            >>> print(f"Expenses: ${summary.total_expenses}")
+            >>> print(f"Net: ${summary.net_amount}")
+            >>> print(f"Savings Rate: {summary.savings_rate:.1f}%")
         """
-        # Filter transactions for the specified month
+        # Step 1: Filter transactions for the specified month
+        # List comprehension: [item for item in list if condition]
+        # This creates a new list with only transactions matching the date
         month_transactions = [
             t
             for t in self.transactions
             if t.date.year == year and t.date.month == month
         ]
 
+        # Step 2: Initialize accumulators
+        # Use Decimal for precise calculations (no floating-point errors)
         total_income = Decimal("0")
         total_expenses = Decimal("0")
+        
+        # defaultdict automatically creates Decimal("0") for new categories
+        # This makes it easy to accumulate category totals
         category_breakdown: Dict[str, Decimal] = defaultdict(Decimal)
 
+        # Step 3: Process each transaction in the month
         for transaction in month_transactions:
             if transaction.is_income:
+                # Income transaction: add to total income
+                # Use absolute_amount to get positive value
                 total_income += transaction.absolute_amount
             elif transaction.is_expense:
+                # Expense transaction: add to total expenses
                 amount = transaction.absolute_amount
                 total_expenses += amount
 
-                # Add to category breakdown if categorized
+                # Add to category breakdown if transaction is categorized
+                # This creates spending totals by category
                 if transaction.category:
                     category_name = transaction.category.name
+                    # defaultdict handles new categories automatically
                     category_breakdown[category_name] += amount
 
+        # Step 4: Calculate net amount
+        # Positive = savings, Negative = deficit
         net_amount = total_income - total_expenses
 
+        # Step 5: Create and return summary object
+        # Convert defaultdict to regular dict for serialization
         return MonthlySummary(
             year=year,
             month=month,
@@ -96,7 +176,7 @@ class SpendingAnalyzer:
             total_expenses=total_expenses,
             net_amount=net_amount,
             transaction_count=len(month_transactions),
-            category_breakdown=dict(category_breakdown),
+            category_breakdown=dict(category_breakdown),  # Convert to regular dict
         )
 
     def get_all_monthly_summaries(self) -> List[MonthlySummary]:

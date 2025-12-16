@@ -2,6 +2,23 @@
 
 A comprehensive finance tracker and organizer application that processes monthly CSV bank statement files, automatically categorizes spending, and provides detailed analysis and reporting.
 
+## 📚 Documentation
+
+This codebase is designed to be educational and maintainable. Comprehensive documentation is available:
+
+- **[Learning Guide](docs/LEARNING_GUIDE.md)** - Start here! Learn how the codebase works, design patterns used, and key concepts
+- **[Code Walkthrough](docs/CODE_WALKTHROUGH.md)** - Step-by-step explanation of how data flows through the system
+- **[Code Organization](docs/CODE_ORGANIZATION.md)** - Understanding the module structure and organization
+- **[Architecture](docs/ARCHITECTURE.md)** - System design and architecture overview
+- **[API Reference](docs/API.md)** - Complete API documentation
+- **[Getting Started](docs/GETTING_STARTED.md)** - User guide for getting started
+
+All code includes detailed docstrings and inline comments explaining:
+- **What** the code does
+- **Why** design decisions were made
+- **How** algorithms work
+- **Learning points** for understanding concepts
+
 ## Features
 
 - 📊 **Multi-format CSV Parsing**: Automatically detects and parses 3+ common bank statement formats
@@ -72,6 +89,7 @@ finance-tracker stats
 
 ```bash
 # Start the web app (opens in Microsoft Edge on macOS)
+# The web app provides a modern UI for all features
 finance-tracker-web
 ```
 

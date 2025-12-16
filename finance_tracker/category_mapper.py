@@ -52,7 +52,58 @@ class CategoryRule:
 
 
 class CategoryMapper:
-    """Maps transaction descriptions to categories using keyword and pattern matching."""
+    """
+    Maps transaction descriptions to categories using keyword and pattern matching.
+    
+    HOW IT WORKS:
+    =============
+    
+    This class uses a rule-based system to automatically categorize transactions:
+    
+    1. **Rule Storage**: Rules are stored as regex patterns with associated categories
+    2. **Pattern Matching**: When categorizing, it checks each rule against the description
+    3. **First Match Wins**: Returns the first matching category (rules are ordered by priority)
+    4. **Case Insensitive**: By default, matching is case-insensitive for flexibility
+    
+    RULE FORMAT:
+    ===========
+    
+    Each rule consists of:
+    - **Pattern**: A regex pattern to match transaction descriptions
+    - **Category Name**: The category to assign if pattern matches
+    - **Parent Category**: Optional parent for hierarchical organization
+    - **Case Sensitive**: Whether matching should be case-sensitive
+    
+    EXAMPLE RULE:
+    =============
+    
+    Pattern: `r"(?i)\\b(grocery|supermarket)\\b"`
+    - `(?i)` = case-insensitive flag
+    - `\\b` = word boundary (matches whole words only)
+    - `(grocery|supermarket)` = matches either word
+    - Result: Matches "GROCERY STORE", "Supermarket #123", etc.
+    
+    WHY REGEX?
+    ==========
+    
+    - Flexible: Can match variations (e.g., "grocery", "groceries", "grocery store")
+    - Powerful: Can handle complex patterns
+    - Standard: Regex is well-understood and widely used
+    
+    LEARNING POINTS:
+    ===============
+    
+    1. **Rule-based Systems**: Simple but effective for categorization
+    2. **Regex Patterns**: Learn regex to create powerful matching rules
+    3. **Priority Ordering**: Rules are checked in order (first match wins)
+    4. **Extensibility**: Easy to add new rules without changing code
+    
+    Example:
+        >>> mapper = CategoryMapper()
+        >>> category = mapper.categorize("GROCERY STORE #1234")
+        >>> print(category.name)  # "Groceries"
+        >>> print(category.parent)  # "Food & Dining"
+    """
 
     def __init__(self, custom_rules: Optional[List[CategoryRule]] = None):
         """
@@ -60,11 +111,13 @@ class CategoryMapper:
 
         Args:
             custom_rules: Optional list of custom rules to add to default rules
+                         Custom rules are added after default rules, so they have
+                         lower priority (default rules are checked first)
         """
         self.rules: List[CategoryRule] = []
-        self._load_default_rules()
+        self._load_default_rules()  # Load built-in rules first
         if custom_rules:
-            self.rules.extend(custom_rules)
+            self.rules.extend(custom_rules)  # Add custom rules after defaults
 
     def _load_default_rules(self) -> None:
         """Load default category mapping rules."""

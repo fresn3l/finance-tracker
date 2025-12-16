@@ -64,7 +64,64 @@ class JSONEncoder(json.JSONEncoder):
 
 
 class TransactionRepository:
-    """Repository for managing transaction storage."""
+    """
+    Repository for managing transaction storage.
+    
+    REPOSITORY PATTERN:
+    ===================
+    
+    This class implements the Repository pattern, which abstracts data access.
+    The repository provides a clean interface for storing and retrieving transactions
+    without exposing the details of how data is stored (JSON files, in this case).
+    
+    WHY USE REPOSITORY PATTERN?
+    ===========================
+    
+    1. **Abstraction**: Business logic doesn't know about JSON files
+    2. **Flexibility**: Easy to switch to database later
+    3. **Testability**: Can use in-memory storage for tests
+    4. **Single Responsibility**: Repository only handles storage
+    
+    HOW IT WORKS:
+    =============
+    
+    The repository provides CRUD operations:
+    - **Create**: `save()` - Add new transactions
+    - **Read**: `load_all()`, `get_by_id()` - Retrieve transactions
+    - **Update**: `update()` - Modify existing transactions
+    - **Delete**: `delete()`, `delete_multiple()` - Remove transactions
+    
+    STORAGE FORMAT:
+    ==============
+    
+    Transactions are stored as JSON:
+    ```json
+    {
+      "transactions": [
+        {
+          "date": "2024-01-15",
+          "amount": "-50.00",
+          "description": "Grocery Store",
+          ...
+        }
+      ]
+    }
+    ```
+    
+    LEARNING POINTS:
+    ================
+    
+    1. **Repository Pattern**: Abstract data access
+    2. **Serialization**: Convert objects to/from JSON
+    3. **Duplicate Detection**: Prevent duplicate data
+    4. **Error Handling**: Handle file I/O errors gracefully
+    
+    Example:
+        >>> repo = TransactionRepository(data_dir)
+        >>> repo.save(transactions)  # Save transactions
+        >>> loaded = repo.load_all()  # Load all transactions
+        >>> duplicates = repo.check_duplicates(new_transactions)  # Check for duplicates
+    """
 
     def __init__(self, data_dir: Path):
         """
@@ -72,9 +129,17 @@ class TransactionRepository:
 
         Args:
             data_dir: Directory where transaction data is stored
+                     Creates directory if it doesn't exist
+                     Default location: ~/.finance-tracker/
         """
         self.data_dir = Path(data_dir)
+        # Create directory if it doesn't exist
+        # parents=True creates parent directories too
+        # exist_ok=True doesn't error if directory already exists
         self.data_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Path to the transactions JSON file
+        # All transactions are stored in a single file
         self.transactions_file = self.data_dir / "transactions.json"
 
     def save(self, transactions: List[Transaction]) -> None:
@@ -289,40 +354,97 @@ class TransactionRepository:
 
     def transaction_id(self, transaction: Transaction) -> str:
         """
-        Generate a unique identifier for a transaction.
-
-        Creates a fingerprint using key transaction attributes to uniquely identify
-        a transaction. This is used for duplicate detection.
-
-        The fingerprint includes:
-        - Date (ISO format)
-        - Amount (exact match required)
-        - Description (normalized to lowercase)
-        - Reference number (if available)
-
+        Generate a unique identifier (fingerprint) for a transaction.
+        
+        DUPLICATE DETECTION ALGORITHM:
+        ===============================
+        
+        This method creates a "fingerprint" that uniquely identifies a transaction.
         Two transactions with the same fingerprint are considered duplicates.
-
+        
+        HOW IT WORKS:
+        =============
+        
+        1. **Extract Key Attributes**: Date, amount, description, reference
+        2. **Normalize Data**: 
+           - Date → ISO format (YYYY-MM-DD) for consistency
+           - Description → lowercase, stripped of whitespace
+           - Amount → exact string representation
+        3. **Combine**: Join with pipe separator (|)
+        4. **Compare**: Two transactions with same fingerprint = duplicate
+        
+        WHY THESE ATTRIBUTES?
+        =====================
+        
+        - **Date**: Transactions rarely happen at exact same time
+        - **Amount**: Must match exactly (even $0.01 difference = different transaction)
+        - **Description**: Normalized to handle case/whitespace variations
+        - **Reference**: Bank transaction IDs are unique (if available)
+        
+        EDGE CASES HANDLED:
+        ===================
+        
+        - Missing reference: Still works (just uses date/amount/description)
+        - Case differences: Normalized to lowercase
+        - Whitespace: Stripped from description
+        - Date formats: Always converted to ISO format
+        
+        PERFORMANCE:
+        ============
+        
+        - Fast: String operations are O(1) or O(n) where n is description length
+        - Hashable: Can be used as dictionary keys for O(1) duplicate lookup
+        - Deterministic: Same transaction always produces same fingerprint
+        
         Args:
-            transaction: Transaction to identify
+            transaction: Transaction to create fingerprint for
 
         Returns:
             Unique identifier string (pipe-separated values)
-
+            Format: "YYYY-MM-DD|amount|description|reference"
+            
         Example:
+            >>> transaction = Transaction(
+            ...     date=date(2024, 1, 15),
+            ...     amount=Decimal("-50.00"),
+            ...     description="Grocery Store",
+            ...     reference="TXN123"
+            ... )
             >>> repo.transaction_id(transaction)
-            '2024-01-15|-50.00|grocery store #1234|REF123'
+            '2024-01-15|-50.00|grocery store|TXN123'
+            
+        Learning Note:
+            This is a simple but effective duplicate detection algorithm.
+            More sophisticated approaches could use fuzzy matching or machine learning,
+            but this works well for most use cases and is easy to understand.
         """
         # Build fingerprint from key attributes
-        # Date and amount are most important for uniqueness
+        # These attributes together uniquely identify a transaction
+        
+        # 1. Date in ISO format (YYYY-MM-DD) - ensures consistent formatting
+        #    ISO format is standard and unambiguous
         parts = [
-            transaction.date.isoformat(),  # ISO format for consistency
-            str(transaction.amount),  # Exact amount match
-            transaction.description.strip().lower(),  # Normalized description
+            transaction.date.isoformat(),
+            
+            # 2. Amount as string - exact match required
+            #    Using string preserves exact decimal precision
+            str(transaction.amount),
+            
+            # 3. Description normalized (lowercase, stripped)
+            #    This handles case/whitespace variations:
+            #    "GROCERY STORE" and "grocery store" → same fingerprint
+            transaction.description.strip().lower(),
         ]
-        # Add reference if available (some banks include transaction IDs)
+        
+        # 4. Reference number if available (optional)
+        #    Some banks provide unique transaction IDs
+        #    Including this makes duplicate detection more accurate
         if transaction.reference:
             parts.append(transaction.reference)
-        # Use pipe separator (unlikely to appear in transaction data)
+        
+        # Join with pipe separator (|)
+        # Pipe is unlikely to appear in transaction data, making it a safe separator
+        # Alternative separators: \0 (null), ||| (triple pipe), or base64 encoding
         return "|".join(parts)
 
     def _transaction_id(self, transaction: Transaction) -> str:
