@@ -1,4 +1,32 @@
-"""Data models for finance tracker application."""
+"""
+Data models for finance tracker application.
+
+This module defines the core data structures used throughout the application:
+- TransactionType: Enumeration of transaction types
+- Category: Spending categories with hierarchical support
+- Transaction: Individual financial transactions
+- MonthlySummary: Aggregated monthly statistics
+- SpendingPattern: Category-level spending analysis
+
+All models use Pydantic v2 for validation, serialization, and type safety.
+Monetary values use Decimal to avoid floating-point precision issues.
+
+Example:
+    >>> from finance_tracker.models import Transaction, TransactionType, Category
+    >>> from datetime import date
+    >>> from decimal import Decimal
+    >>> 
+    >>> category = Category(name="Groceries", parent="Food & Dining")
+    >>> transaction = Transaction(
+    ...     date=date(2024, 1, 15),
+    ...     amount=Decimal("-50.00"),
+    ...     description="Grocery Store",
+    ...     transaction_type=TransactionType.DEBIT,
+    ...     category=category
+    ... )
+    >>> print(transaction.is_expense)
+    True
+"""
 
 from __future__ import annotations
 
@@ -42,6 +70,14 @@ class Transaction(BaseModel):
     reference: Optional[str] = Field(None, description="Transaction reference number")
     balance: Optional[Decimal] = Field(None, description="Account balance after transaction")
     notes: Optional[str] = Field(None, description="User-added notes")
+    id: Optional[str] = Field(None, description="Unique transaction identifier")
+    is_recurring: bool = Field(default=False, description="Whether this is a recurring transaction")
+    recurring_id: Optional[str] = Field(None, description="ID of recurring transaction group")
+    parent_transaction_id: Optional[str] = Field(None, description="ID of parent transaction if this is a split")
+    id: Optional[str] = Field(None, description="Unique transaction identifier")
+    is_recurring: bool = Field(default=False, description="Whether this is a recurring transaction")
+    recurring_id: Optional[str] = Field(None, description="ID of recurring transaction group")
+    parent_transaction_id: Optional[str] = Field(None, description="ID of parent transaction if this is a split")
 
     @field_validator("amount")
     @classmethod
@@ -120,6 +156,78 @@ class SpendingPattern(BaseModel):
     trend: Optional[str] = Field(
         None, description="Trend direction (increasing, decreasing, stable)"
     )
+
+    model_config = ConfigDict(
+        json_encoders={
+            Decimal: str,
+        }
+    )
+
+
+class Budget(BaseModel):
+    """Represents a monthly budget for a category."""
+
+    category_name: str = Field(..., description="Category name")
+    year: int = Field(..., description="Budget year")
+    month: int = Field(..., ge=1, le=12, description="Budget month (1-12)")
+    amount: Decimal = Field(..., description="Budget amount")
+    alert_threshold: Decimal = Field(
+        default=Decimal("0.8"), description="Alert when spending reaches this percentage (0-1)"
+    )
+    notes: Optional[str] = Field(None, description="Budget notes")
+
+    model_config = ConfigDict(
+        json_encoders={
+            Decimal: str,
+        }
+    )
+
+
+class BudgetTemplate(BaseModel):
+    """Template for quick budget setup."""
+
+    name: str = Field(..., description="Template name")
+    category_budgets: dict[str, Decimal] = Field(
+        ..., description="Category name to budget amount mapping"
+    )
+    description: Optional[str] = Field(None, description="Template description")
+
+    model_config = ConfigDict(
+        json_encoders={
+            Decimal: str,
+        }
+    )
+
+
+class RecurringTransaction(BaseModel):
+    """Represents a detected recurring transaction pattern."""
+
+    id: str = Field(..., description="Unique recurring transaction ID")
+    description_pattern: str = Field(..., description="Pattern matching transaction descriptions")
+    amount: Decimal = Field(..., description="Typical transaction amount")
+    frequency: str = Field(..., description="Frequency: monthly, weekly, yearly")
+    confidence: float = Field(..., ge=0.0, le=1.0, description="Confidence score (0-1)")
+    category: Optional[Category] = Field(None, description="Assigned category")
+    account: Optional[str] = Field(None, description="Account identifier")
+    last_seen: datetime.date = Field(..., description="Date of last occurrence")
+    next_expected: Optional[datetime.date] = Field(None, description="Expected next occurrence")
+    transaction_count: int = Field(default=0, description="Number of matching transactions")
+    amount_variance: Optional[Decimal] = Field(None, description="Amount variance if variable")
+
+    model_config = ConfigDict(
+        json_encoders={
+            Decimal: str,
+        }
+    )
+
+
+class SplitTransaction(BaseModel):
+    """Represents a split of a transaction into multiple categories."""
+
+    parent_transaction_id: str = Field(..., description="ID of parent transaction")
+    amount: Decimal = Field(..., description="Amount for this split")
+    category: Category = Field(..., description="Category for this split")
+    description: Optional[str] = Field(None, description="Split description/notes")
 
     model_config = ConfigDict(
         json_encoders={

@@ -1,4 +1,27 @@
-"""Command-line interface for finance tracker."""
+"""
+Command-line interface for finance tracker.
+
+This module provides a Click-based CLI with multiple subcommands for different
+operations. The CLI integrates with all core components to provide a complete
+command-line experience.
+
+Available Commands:
+    - import-csv: Import and process CSV files
+    - summary: Show monthly spending summaries
+    - categories: Display top spending categories
+    - uncategorized: List uncategorized transactions
+    - recategorize: Recategorize all stored transactions
+    - export: Export transactions to JSON/CSV
+    - stats: Show overall statistics
+
+The CLI respects configuration settings and provides helpful error messages.
+
+Example Usage:
+    $ finance-tracker import-csv bank_statement.csv
+    $ finance-tracker summary --year 2024 --month 1
+    $ finance-tracker categories --limit 10
+    $ finance-tracker export transactions.json --format json
+"""
 
 import logging
 from pathlib import Path

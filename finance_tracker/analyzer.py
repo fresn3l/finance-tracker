@@ -1,4 +1,37 @@
-"""Spending analysis module for financial transactions."""
+"""
+Spending analysis module for financial transactions.
+
+This module provides comprehensive analysis of spending patterns, including:
+    - Monthly summaries with income/expense breakdowns
+    - Category-level spending analysis
+    - Spending trends and patterns
+    - Top categories identification
+    - Average spending calculations
+
+The analyzer works with lists of Transaction objects and provides various
+aggregation and analysis methods.
+
+Example:
+    >>> from finance_tracker.analyzer import SpendingAnalyzer
+    >>> 
+    >>> analyzer = SpendingAnalyzer(transactions)
+    >>> 
+    >>> # Get monthly summary
+    >>> summary = analyzer.get_monthly_summary(2024, 1)
+    >>> print(f"Income: ${summary.total_income}")
+    >>> print(f"Expenses: ${summary.total_expenses}")
+    >>> print(f"Savings Rate: {summary.savings_rate:.1f}%")
+    >>> 
+    >>> # Get category breakdown
+    >>> breakdown = analyzer.get_category_breakdown()
+    >>> for category, amount in breakdown.items():
+    ...     print(f"{category}: ${amount}")
+    >>> 
+    >>> # Get top spending categories
+    >>> top = analyzer.get_top_categories(limit=5)
+    >>> for pattern in top:
+    ...     print(f"{pattern.category}: ${pattern.total_amount}")
+"""
 
 from collections import defaultdict
 from datetime import date
@@ -262,36 +295,58 @@ class SpendingAnalyzer:
         """
         Determine spending trend for a category.
 
+        Analyzes recent spending patterns to determine if spending in a category
+        is increasing, decreasing, or stable. Uses a simple comparison of first
+        half vs second half of the time period.
+
         Args:
             category_name: Category name to analyze
-            months: Number of recent months to consider
+            months: Number of recent months to consider (default: 3)
 
         Returns:
-            Trend direction: "increasing", "decreasing", or "stable", or None if insufficient data
+            Trend direction: "increasing", "decreasing", or "stable"
+            Returns None if insufficient data (< 2 months or < 2 data points)
+
+        Algorithm:
+            1. Get spending amounts for recent months
+            2. Split into first half and second half
+            3. Compare totals:
+               - >10% increase → "increasing"
+               - >10% decrease → "decreasing"
+               - Otherwise → "stable"
+
+        Example:
+            >>> analyzer.get_spending_trend("Groceries", months=6)
+            'increasing'
         """
         summaries = self.get_all_monthly_summaries()
         if len(summaries) < 2:
-            return None
+            return None  # Need at least 2 months of data
 
-        # Get recent months
+        # Get recent months (most recent first due to sorting)
         recent_summaries = summaries[-months:]
+        # Extract spending amounts for the category from each month
         amounts = [
             s.category_breakdown.get(category_name, Decimal("0")) for s in recent_summaries
         ]
 
         if len(amounts) < 2:
-            return None
+            return None  # Need at least 2 data points
 
-        # Calculate trend
-        first_half = sum(amounts[: len(amounts) // 2])
-        second_half = sum(amounts[len(amounts) // 2 :])
+        # Split into first half and second half for comparison
+        # This compares earlier period vs later period
+        midpoint = len(amounts) // 2
+        first_half = sum(amounts[:midpoint])
+        second_half = sum(amounts[midpoint:])
 
+        # Use 10% threshold to avoid noise from small fluctuations
+        # This means a change must be >10% to be considered a trend
         if second_half > first_half * Decimal("1.1"):  # 10% increase threshold
             return "increasing"
         elif second_half < first_half * Decimal("0.9"):  # 10% decrease threshold
             return "decreasing"
         else:
-            return "stable"
+            return "stable"  # Change is within ±10%, considered stable
 
     def _filter_transactions(
         self, year: Optional[int] = None, month: Optional[int] = None

@@ -1,4 +1,35 @@
-"""Web application using Eel for finance tracker."""
+"""
+Web application using Eel for finance tracker.
+
+This module provides a desktop web application interface using the Eel framework.
+The app runs in a desktop window (Microsoft Edge on macOS) and provides a modern
+web-based UI for all finance tracker operations.
+
+Features:
+    - Dashboard with statistics and charts
+    - Transaction list with search and filters
+    - Category breakdown and analysis
+    - CSV file import with drag-and-drop
+    - Interactive charts using Chart.js
+    - Real-time data updates
+
+The module exposes Python functions to JavaScript via Eel's @eel.expose decorator,
+allowing the frontend to interact with the backend seamlessly.
+
+Architecture:
+    - Frontend: HTML/CSS/JavaScript in web/ directory
+    - Backend: Python functions exposed via Eel
+    - Communication: Bidirectional via Eel's RPC system
+
+Example:
+    >>> from finance_tracker.web_app import start_web_app
+    >>> 
+    >>> # Start web app (opens in browser window)
+    >>> start_web_app(port=8080, size=(1200, 800))
+    
+Or from command line:
+    $ finance-tracker-web
+"""
 
 import logging
 import subprocess
@@ -8,8 +39,14 @@ from typing import Dict, List, Optional
 
 import eel
 
+from finance_tracker.budget_tracker import BudgetRepository, BudgetTracker
+from finance_tracker.category_rules_manager import CategoryRulesManager
 from finance_tracker.config import get_config
 from finance_tracker.logging_config import setup_logging
+from finance_tracker.models import Budget, BudgetTemplate, Category, SplitTransaction
+from finance_tracker.recurring_detector import RecurringTransactionDetector
+from finance_tracker.search_filter import TransactionSearchFilter
+from finance_tracker.transaction_editor import TransactionEditor
 from finance_tracker.workflow import FinanceTrackerWorkflow
 
 logger = logging.getLogger(__name__)
@@ -344,6 +381,527 @@ def recategorize_all(overwrite: bool = True) -> Dict:
     except Exception as e:
         logger.error(f"Error recategorizing: {e}", exc_info=True)
         return {"success": False, "error": str(e)}
+
+
+# Transaction Editing Endpoints
+@eel.expose
+def edit_transaction(
+    transaction_id: str,
+    description: Optional[str] = None,
+    amount: Optional[str] = None,
+    date: Optional[str] = None,
+    category_name: Optional[str] = None,
+    category_parent: Optional[str] = None,
+    notes: Optional[str] = None,
+) -> Dict:
+    """Edit a transaction."""
+    if workflow is None:
+        init_workflow()
+
+    try:
+        from datetime import datetime
+        from decimal import Decimal
+
+        editor = TransactionEditor(workflow.storage.transaction_repo)
+        category = None
+        if category_name:
+            category = Category(name=category_name, parent=category_parent)
+
+        transaction_date = None
+        if date:
+            transaction_date = datetime.fromisoformat(date).date()
+
+        transaction_amount = None
+        if amount:
+            transaction_amount = Decimal(amount)
+
+        updated = editor.edit_transaction(
+            transaction_id=transaction_id,
+            description=description,
+            amount=transaction_amount,
+            date=transaction_date,
+            category=category,
+            notes=notes,
+        )
+
+        if updated:
+            return {"success": True, "transaction": _transaction_to_dict(updated)}
+        return {"success": False, "error": "Transaction not found"}
+    except Exception as e:
+        logger.error(f"Error editing transaction: {e}", exc_info=True)
+        return {"success": False, "error": str(e)}
+
+
+@eel.expose
+def delete_transaction(transaction_id: str) -> Dict:
+    """Delete a transaction."""
+    if workflow is None:
+        init_workflow()
+
+    try:
+        editor = TransactionEditor(workflow.storage.transaction_repo)
+        success = editor.delete_transaction(transaction_id)
+        return {"success": success}
+    except Exception as e:
+        logger.error(f"Error deleting transaction: {e}", exc_info=True)
+        return {"success": False, "error": str(e)}
+
+
+@eel.expose
+def delete_transactions(transaction_ids: List[str]) -> Dict:
+    """Delete multiple transactions."""
+    if workflow is None:
+        init_workflow()
+
+    try:
+        editor = TransactionEditor(workflow.storage.transaction_repo)
+        count = editor.delete_multiple(transaction_ids)
+        return {"success": True, "deleted_count": count}
+    except Exception as e:
+        logger.error(f"Error deleting transactions: {e}", exc_info=True)
+        return {"success": False, "error": str(e)}
+
+
+@eel.expose
+def split_transaction(transaction_id: str, splits: List[Dict]) -> Dict:
+    """Split a transaction into multiple transactions."""
+    if workflow is None:
+        init_workflow()
+
+    try:
+        from decimal import Decimal
+
+        editor = TransactionEditor(workflow.storage.transaction_repo)
+        split_list = []
+        for split_data in splits:
+            split_list.append(
+                SplitTransaction(
+                    parent_transaction_id=transaction_id,
+                    amount=Decimal(split_data["amount"]),
+                    category=Category(
+                        name=split_data["category_name"],
+                        parent=split_data.get("category_parent"),
+                    ),
+                    description=split_data.get("description"),
+                )
+            )
+
+        split_transactions = editor.split_transaction(transaction_id, split_list)
+        return {
+            "success": True,
+            "transactions": [_transaction_to_dict(t) for t in split_transactions],
+        }
+    except Exception as e:
+        logger.error(f"Error splitting transaction: {e}", exc_info=True)
+        return {"success": False, "error": str(e)}
+
+
+@eel.expose
+def merge_transactions(transaction_ids: List[str], keep_first: bool = True) -> Dict:
+    """Merge multiple transactions."""
+    if workflow is None:
+        init_workflow()
+
+    try:
+        editor = TransactionEditor(workflow.storage.transaction_repo)
+        merged = editor.merge_transactions(transaction_ids, keep_first)
+        if merged:
+            return {"success": True, "transaction": _transaction_to_dict(merged)}
+        return {"success": False, "error": "Failed to merge"}
+    except Exception as e:
+        logger.error(f"Error merging transactions: {e}", exc_info=True)
+        return {"success": False, "error": str(e)}
+
+
+@eel.expose
+def bulk_edit_transactions(
+    transaction_ids: List[str], category_name: Optional[str] = None, notes: Optional[str] = None
+) -> Dict:
+    """Bulk edit transactions."""
+    if workflow is None:
+        init_workflow()
+
+    try:
+        editor = TransactionEditor(workflow.storage.transaction_repo)
+        category = None
+        if category_name:
+            category = Category(name=category_name)
+
+        count = editor.bulk_edit(transaction_ids, category=category, notes=notes)
+        return {"success": True, "updated_count": count}
+    except Exception as e:
+        logger.error(f"Error bulk editing: {e}", exc_info=True)
+        return {"success": False, "error": str(e)}
+
+
+# Search & Filter Endpoints
+@eel.expose
+def search_transactions(
+    query: Optional[str] = None,
+    category: Optional[str] = None,
+    account: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    amount_min: Optional[str] = None,
+    amount_max: Optional[str] = None,
+    transaction_type: Optional[str] = None,
+    is_recurring: Optional[bool] = None,
+) -> List[Dict]:
+    """Search and filter transactions."""
+    if workflow is None:
+        init_workflow()
+
+    try:
+        from datetime import datetime
+        from decimal import Decimal
+
+        transactions = workflow.storage.transaction_repo.load_all()
+        searcher = TransactionSearchFilter(transactions)
+
+        date_from_obj = None
+        if date_from:
+            date_from_obj = datetime.fromisoformat(date_from).date()
+
+        date_to_obj = None
+        if date_to:
+            date_to_obj = datetime.fromisoformat(date_to).date()
+
+        amount_min_obj = None
+        if amount_min:
+            amount_min_obj = Decimal(amount_min)
+
+        amount_max_obj = None
+        if amount_max:
+            amount_max_obj = Decimal(amount_max)
+
+        results = searcher.search(
+            query=query,
+            category=category,
+            account=account,
+            date_from=date_from_obj,
+            date_to=date_to_obj,
+            amount_min=amount_min_obj,
+            amount_max=amount_max_obj,
+            transaction_type=transaction_type,
+            is_recurring=is_recurring,
+        )
+
+        return [_transaction_to_dict(t) for t in results]
+    except Exception as e:
+        logger.error(f"Error searching transactions: {e}", exc_info=True)
+        return []
+
+
+@eel.expose
+def get_search_filters() -> Dict:
+    """Get available filter options."""
+    if workflow is None:
+        init_workflow()
+
+    try:
+        transactions = workflow.storage.transaction_repo.load_all()
+        searcher = TransactionSearchFilter(transactions)
+        return {
+            "categories": searcher.get_categories(),
+            "accounts": searcher.get_accounts(),
+        }
+    except Exception as e:
+        logger.error(f"Error getting filters: {e}", exc_info=True)
+        return {"categories": [], "accounts": []}
+
+
+# Budget Tracking Endpoints
+@eel.expose
+def set_budget(
+    category_name: str,
+    year: int,
+    month: int,
+    amount: str,
+    alert_threshold: str = "0.8",
+    notes: Optional[str] = None,
+) -> Dict:
+    """Set a budget for a category."""
+    if workflow is None:
+        init_workflow()
+
+    try:
+        from decimal import Decimal
+
+        budget_repo = BudgetRepository(workflow.storage.data_dir)
+        budget = Budget(
+            category_name=category_name,
+            year=year,
+            month=month,
+            amount=Decimal(amount),
+            alert_threshold=Decimal(alert_threshold),
+            notes=notes,
+        )
+        budget_repo.save_budget(budget)
+        return {"success": True}
+    except Exception as e:
+        logger.error(f"Error setting budget: {e}", exc_info=True)
+        return {"success": False, "error": str(e)}
+
+
+@eel.expose
+def get_budget_status(category_name: str, year: int, month: int) -> Dict:
+    """Get budget status for a category."""
+    if workflow is None:
+        init_workflow()
+
+    try:
+        transactions = workflow.storage.transaction_repo.load_all()
+        budget_repo = BudgetRepository(workflow.storage.data_dir)
+        tracker = BudgetTracker(transactions, budget_repo)
+        status = tracker.get_budget_status(category_name, year, month)
+        return status
+    except Exception as e:
+        logger.error(f"Error getting budget status: {e}", exc_info=True)
+        return {"has_budget": False, "error": str(e)}
+
+
+@eel.expose
+def get_all_budget_statuses(year: int, month: int) -> List[Dict]:
+    """Get all budget statuses for a month."""
+    if workflow is None:
+        init_workflow()
+
+    try:
+        transactions = workflow.storage.transaction_repo.load_all()
+        budget_repo = BudgetRepository(workflow.storage.data_dir)
+        tracker = BudgetTracker(transactions, budget_repo)
+        return tracker.get_all_budget_statuses(year, month)
+    except Exception as e:
+        logger.error(f"Error getting budget statuses: {e}", exc_info=True)
+        return []
+
+
+@eel.expose
+def get_budget_alerts(year: int, month: int) -> List[Dict]:
+    """Get budget alerts for a month."""
+    if workflow is None:
+        init_workflow()
+
+    try:
+        transactions = workflow.storage.transaction_repo.load_all()
+        budget_repo = BudgetRepository(workflow.storage.data_dir)
+        tracker = BudgetTracker(transactions, budget_repo)
+        return tracker.check_alerts(year, month)
+    except Exception as e:
+        logger.error(f"Error getting budget alerts: {e}", exc_info=True)
+        return []
+
+
+@eel.expose
+def delete_budget(category_name: str, year: int, month: int) -> Dict:
+    """Delete a budget."""
+    if workflow is None:
+        init_workflow()
+
+    try:
+        budget_repo = BudgetRepository(workflow.storage.data_dir)
+        success = budget_repo.delete_budget(category_name, year, month)
+        return {"success": success}
+    except Exception as e:
+        logger.error(f"Error deleting budget: {e}", exc_info=True)
+        return {"success": False, "error": str(e)}
+
+
+@eel.expose
+def save_budget_template(name: str, category_budgets: Dict, description: Optional[str] = None) -> Dict:
+    """Save a budget template."""
+    if workflow is None:
+        init_workflow()
+
+    try:
+        from decimal import Decimal
+
+        budget_repo = BudgetRepository(workflow.storage.data_dir)
+        template = BudgetTemplate(
+            name=name,
+            category_budgets={k: Decimal(v) for k, v in category_budgets.items()},
+            description=description,
+        )
+        budget_repo.save_template(template)
+        return {"success": True}
+    except Exception as e:
+        logger.error(f"Error saving template: {e}", exc_info=True)
+        return {"success": False, "error": str(e)}
+
+
+@eel.expose
+def get_budget_templates() -> List[Dict]:
+    """Get all budget templates."""
+    if workflow is None:
+        init_workflow()
+
+    try:
+        budget_repo = BudgetRepository(workflow.storage.data_dir)
+        templates = budget_repo.load_templates()
+        return [
+            {
+                "name": t.name,
+                "category_budgets": {k: str(v) for k, v in t.category_budgets.items()},
+                "description": t.description,
+            }
+            for t in templates
+        ]
+    except Exception as e:
+        logger.error(f"Error getting templates: {e}", exc_info=True)
+        return []
+
+
+# Recurring Transaction Endpoints
+@eel.expose
+def detect_recurring_transactions(min_occurrences: int = 3) -> List[Dict]:
+    """Detect recurring transactions."""
+    if workflow is None:
+        init_workflow()
+
+    try:
+        transactions = workflow.storage.transaction_repo.load_all()
+        detector = RecurringTransactionDetector(transactions)
+        recurring = detector.detect_recurring(min_occurrences)
+        return [
+            {
+                "id": r.id,
+                "description_pattern": r.description_pattern,
+                "amount": str(r.amount),
+                "frequency": r.frequency,
+                "confidence": r.confidence,
+                "category": r.category.name if r.category else None,
+                "account": r.account,
+                "last_seen": r.last_seen.isoformat(),
+                "next_expected": r.next_expected.isoformat() if r.next_expected else None,
+                "transaction_count": r.transaction_count,
+            }
+            for r in recurring
+        ]
+    except Exception as e:
+        logger.error(f"Error detecting recurring: {e}", exc_info=True)
+        return []
+
+
+@eel.expose
+def mark_recurring_transactions() -> Dict:
+    """Mark transactions as recurring based on detected patterns."""
+    if workflow is None:
+        init_workflow()
+
+    try:
+        transactions = workflow.storage.transaction_repo.load_all()
+        detector = RecurringTransactionDetector(transactions)
+        recurring = detector.detect_recurring()
+        updated = detector.mark_recurring(recurring)
+        workflow.storage.transaction_repo._save_all(updated)
+        return {"success": True, "marked_count": len([t for t in updated if t.is_recurring])}
+    except Exception as e:
+        logger.error(f"Error marking recurring: {e}", exc_info=True)
+        return {"success": False, "error": str(e)}
+
+
+# Category Rules Management Endpoints
+@eel.expose
+def get_category_rules() -> List[Dict]:
+    """Get all category rules."""
+    if workflow is None:
+        init_workflow()
+
+    try:
+        rules_manager = CategoryRulesManager(workflow.storage.data_dir)
+        return rules_manager.get_all_rules()
+    except Exception as e:
+        logger.error(f"Error getting rules: {e}", exc_info=True)
+        return []
+
+
+@eel.expose
+def add_category_rule(
+    pattern: str,
+    category_name: str,
+    parent_category: Optional[str] = None,
+    case_sensitive: bool = False,
+) -> Dict:
+    """Add a category rule."""
+    if workflow is None:
+        init_workflow()
+
+    try:
+        rules_manager = CategoryRulesManager(workflow.storage.data_dir)
+        success = rules_manager.add_rule(pattern, category_name, parent_category, case_sensitive)
+        return {"success": success}
+    except Exception as e:
+        logger.error(f"Error adding rule: {e}", exc_info=True)
+        return {"success": False, "error": str(e)}
+
+
+@eel.expose
+def remove_category_rule(pattern: str, category_name: str) -> Dict:
+    """Remove a category rule."""
+    if workflow is None:
+        init_workflow()
+
+    try:
+        rules_manager = CategoryRulesManager(workflow.storage.data_dir)
+        success = rules_manager.remove_rule(pattern, category_name)
+        return {"success": success}
+    except Exception as e:
+        logger.error(f"Error removing rule: {e}", exc_info=True)
+        return {"success": False, "error": str(e)}
+
+
+@eel.expose
+def test_category_rule(pattern: str, test_strings: List[str]) -> Dict:
+    """Test a category rule pattern."""
+    if workflow is None:
+        init_workflow()
+
+    try:
+        rules_manager = CategoryRulesManager(workflow.storage.data_dir)
+        return rules_manager.test_rule(pattern, test_strings)
+    except Exception as e:
+        logger.error(f"Error testing rule: {e}", exc_info=True)
+        return {"valid": False, "error": str(e)}
+
+
+@eel.expose
+def test_rule_against_transactions(pattern: str, limit: int = 10) -> List[Dict]:
+    """Test rule against existing transactions."""
+    if workflow is None:
+        init_workflow()
+
+    try:
+        transactions = workflow.storage.transaction_repo.load_all()
+        rules_manager = CategoryRulesManager(workflow.storage.data_dir)
+        return rules_manager.test_against_transactions(pattern, transactions, limit)
+    except Exception as e:
+        logger.error(f"Error testing rule: {e}", exc_info=True)
+        return []
+
+
+def _transaction_to_dict(transaction) -> Dict:
+    """Helper to convert transaction to dictionary."""
+    result = {
+        "id": transaction.id,
+        "date": transaction.date.isoformat(),
+        "description": transaction.description,
+        "amount": str(transaction.amount),
+        "transaction_type": transaction.transaction_type.value,
+        "category": None,
+        "is_recurring": transaction.is_recurring,
+    }
+    if transaction.category:
+        result["category"] = {
+            "name": transaction.category.name,
+            "parent": transaction.category.parent,
+        }
+    if transaction.account:
+        result["account"] = transaction.account
+    if transaction.notes:
+        result["notes"] = transaction.notes
+    if transaction.balance is not None:
+        result["balance"] = str(transaction.balance)
+    return result
 
 
 def start_web_app(port: int = 8080, size: tuple = (1200, 800)) -> None:

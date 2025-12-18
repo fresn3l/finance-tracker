@@ -1,4 +1,31 @@
-"""Transaction categorization engine."""
+"""
+Transaction categorization engine.
+
+This module provides the categorization engine that applies category mappings to
+transactions. It integrates with CategoryMapper to automatically categorize
+transactions and provides statistics on categorization success.
+
+Features:
+    - Batch and single transaction categorization
+    - Option to overwrite or preserve existing categories
+    - Statistics tracking (success rate, categorized count, etc.)
+    - Filtering methods (uncategorized, by category, etc.)
+    - Manual categorization support
+
+Example:
+    >>> from finance_tracker.categorizer import TransactionCategorizer
+    >>> from finance_tracker.models import Transaction, TransactionType
+    >>> 
+    >>> categorizer = TransactionCategorizer()
+    >>> transaction = Transaction(...)  # Uncategorized transaction
+    >>> categorized = categorizer.categorize_transaction(transaction)
+    >>> 
+    >>> # Batch categorization
+    >>> transactions = [transaction1, transaction2, ...]
+    >>> categorized, stats = categorizer.categorize_transactions(transactions)
+    >>> print(f"Categorized {stats.categorized_count}/{stats.total_transactions}")
+    >>> print(f"Success rate: {stats.categorization_rate:.1f}%")
+"""
 
 from typing import List, Optional
 
