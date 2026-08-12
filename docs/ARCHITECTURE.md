@@ -109,6 +109,7 @@ The Finance Tracker is a Python application that processes bank statement CSV fi
 - Regex pattern matching (case-insensitive by default)
 - Hierarchical category support
 - Custom rule support
+- Learns from user category corrections (normalized merchant → category; takes priority over defaults)
 - Categories organized by parent (Food & Dining, Transportation, etc.)
 
 ### Categorizer (`categorizer.py`)

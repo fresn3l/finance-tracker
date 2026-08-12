@@ -33,6 +33,7 @@ This list tracks what is implemented versus what is still missing. Prefer this f
 - [X] Encryption at rest for JSON data (`FTENC1` Fernet; key in `.key` 0600 or macOS Keychain)
 - [X] Data directory 0700 / data files 0600; config.yaml 0600
 - [X] Vendored Chart.js (no CDN); Eel bound to `127.0.0.1` only
+- [X] Learn from user category corrections (merchant mappings beat default rules on later imports)
 - [X] Mac app packaging scaffolding (PyInstaller spec + py2app setup; build on macOS)
 
 ## 🔄 Still missing (product gaps)
@@ -46,7 +47,6 @@ This list tracks what is implemented versus what is still missing. Prefer this f
 
 ### Analysis extras
 - [ ] Full portfolio / amortization engines (accounts today are balances + net worth)
-- [ ] Learn from user category corrections
 
 ## 📚 Docs & quality (ongoing)
 

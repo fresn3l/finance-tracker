@@ -2,12 +2,11 @@
 
 This document outlines potential enhancements. Several items that used to live here are **already implemented** — see [TODO.md](TODO.md) and [docs/FEATURE_RECOMMENDATIONS.md](docs/FEATURE_RECOMMENDATIONS.md) before rebuilding them.
 
-Already in the codebase: CSV import, categorization (including custom rules UI), encrypted JSON storage, CLI + Eel web UI (localhost, vendored Chart.js), transaction edit/split/merge, search/filter, in-app budgets, recurring detection, month-over-month comparison, cash flow / forecasts / goals / accounts, local HTML/PDF monthly reports, macOS notifications, launchd scheduling, and Mac app packaging scaffolding.
+Already in the codebase: CSV import, categorization (including custom rules UI and learning from category corrections), encrypted JSON storage, CLI + Eel web UI (localhost, vendored Chart.js), transaction edit/split/merge, search/filter, in-app budgets, recurring detection, month-over-month comparison, cash flow / forecasts / goals / accounts, local HTML/PDF monthly reports, macOS notifications, launchd scheduling, and Mac app packaging scaffolding.
 
 ## Enhanced Categorization
 
 - **Machine Learning Integration**: NLP-based categorization from merchant names
-- **Category Learning**: Improve accuracy from user corrections over time
 - **Richer multi-account**: Full portfolio and loan amortization (balances + net worth already exist)
 
 ## Advanced Analytics

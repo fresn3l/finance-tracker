@@ -43,6 +43,8 @@ from typing import List, Optional
 
 from finance_tracker.analyzer import SpendingAnalyzer
 from finance_tracker.categorizer import TransactionCategorizer
+from finance_tracker.category_learner import CategoryLearner
+from finance_tracker.category_mapper import CategoryMapper
 from finance_tracker.csv_parser import CSVParser
 from finance_tracker.models import Transaction
 from finance_tracker.storage import StorageManager
@@ -64,7 +66,10 @@ class FinanceTrackerWorkflow:
         self.storage = StorageManager(data_dir)
         self.account = account
         self.parser = CSVParser(account=account)
-        self.categorizer = TransactionCategorizer()
+        self.learner = CategoryLearner(self.storage.data_dir)
+        self.learner.bootstrap(self.storage.transaction_repo.load_all())
+        mapper = CategoryMapper(learner=self.learner)
+        self.categorizer = TransactionCategorizer(mapper=mapper)
 
     def process_csv_file(
         self,
@@ -189,10 +194,10 @@ class FinanceTrackerWorkflow:
         """
         logger.info("Recategorizing all transactions...")
         transactions = self.storage.transaction_repo.load_all()
-        categorized, stats = self.categorizer.categorize_transactions(transactions, overwrite=overwrite)
-
-        # Save recategorized transactions
-        self.storage.transaction_repo.save(categorized)
+        categorized, stats = self.categorizer.categorize_transactions(
+            transactions, overwrite=overwrite
+        )
+        self.storage.transaction_repo._save_all(categorized)
 
         return {
             "total": stats.total_transactions,

@@ -153,6 +153,7 @@ finance-tracker review --year 2024 --month 1 --csv january_2024.csv
 finance-tracker import-csv january_2024.csv
 finance-tracker uncategorized
 finance-tracker edit <transaction-id> --category Groceries
+# Later imports of that merchant use Groceries automatically
 finance-tracker summary --year 2024 --month 1
 finance-tracker report --year 2024 --month 1
 ```

@@ -54,14 +54,16 @@ class CategoryRule:
 class CategoryMapper:
     """Maps transaction descriptions to categories using keyword and pattern matching."""
 
-    def __init__(self, custom_rules: Optional[List[CategoryRule]] = None):
+    def __init__(self, custom_rules: Optional[List[CategoryRule]] = None, learner=None):
         """
         Initialize category mapper.
 
         Args:
             custom_rules: Optional list of custom rules to add to default rules
+            learner: Optional CategoryLearner; user corrections beat default rules
         """
         self.rules: List[CategoryRule] = []
+        self.learner = learner
         self._load_default_rules()
         if custom_rules:
             self.rules.extend(custom_rules)
@@ -152,6 +154,11 @@ class CategoryMapper:
             Category object if match found, None otherwise
         """
         description_clean = description.strip()
+
+        if self.learner is not None:
+            learned = self.learner.lookup(description_clean)
+            if learned is not None:
+                return learned
 
         # Check rules in order (first match wins)
         for rule in self.rules:

@@ -428,6 +428,8 @@ def edit(
     click.echo(f"  {updated.date}  {_truncate(updated.description, 40)}  ${updated.amount:,.2f}")
     if updated.category:
         click.echo(f"  Category: {updated.category.name}")
+        if category:
+            click.echo("  Learned this merchant for future imports.")
 
 
 @cli.command("delete")

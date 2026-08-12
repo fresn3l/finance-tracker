@@ -62,6 +62,7 @@ class TestCliLaterFeatures:
         assert loaded.category is not None
         assert loaded.category.name == "Dining"
         assert loaded.notes == "reclassified"
+        assert "Learned this merchant" in result.output
 
     def test_edit_missing_transaction_fails(self, tmp_path):
         runner = CliRunner()

@@ -72,6 +72,7 @@ finance-tracker uncategorized
 
 # Edit or delete a transaction by ID
 finance-tracker edit <transaction-id> --category Groceries --notes "fixed"
+# That merchant is remembered for later imports
 finance-tracker delete <transaction-id> --yes
 
 # Budgets
