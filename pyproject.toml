@@ -32,7 +32,8 @@ dependencies = [
     "pydantic>=2.0.0",
     "click>=8.1.0",
     "pyyaml>=6.0",
-    "eel>=0.16.0",
+    "cryptography>=42.0.0",
+    "fpdf2>=2.7.0",
 ]
 
 [project.optional-dependencies]
@@ -42,6 +43,10 @@ dev = [
     "black>=23.0.0",
     "ruff>=0.1.0",
     "mypy>=1.5.0",
+]
+mac = [
+    "py2app>=0.28",
+    "pyinstaller>=6.0",
 ]
 
 [project.scripts]

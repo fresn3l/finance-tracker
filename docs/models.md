@@ -135,6 +135,18 @@ summary = MonthlySummary(
 )
 ```
 
+### MonthOverMonthComparison / CategoryDelta / ComparisonDelta
+
+Dollar and percent change for income, expenses, net, and each category vs the prior calendar month.
+
+### CashFlowSummary
+
+Operating income/expenses vs internal transfers for a month.
+
+### Account / FinancialGoal / SpendingForecast
+
+Balances (checking, savings, credit card, loan, investment, cash), savings/spend/debt/investment targets, and a moving-average next-month forecast.
+
 ### SpendingPattern
 
 Represents spending patterns and trends for a category.

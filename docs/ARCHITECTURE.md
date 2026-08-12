@@ -139,6 +139,9 @@ The Finance Tracker is a Python application that processes bank statement CSV fi
 - Top categories analysis
 - Spending trend detection
 - Average monthly spending calculations
+- Month-over-month comparison (`get_month_over_month`) — income, expenses, net, and per-category $ / % deltas
+- Cash flow (`get_cash_flow`) — operating income/expenses vs transfers
+- Spending forecast (`forecast_next_month`) — moving average of recent months
 
 ### Storage (`storage.py`)
 
@@ -150,11 +153,12 @@ The Finance Tracker is a Python application that processes bank statement CSV fi
 - `StorageManager`: Unified storage operations
 
 **Features**:
-- JSON-based storage (easily migratable to SQLite)
+- JSON-based storage with Fernet encryption at rest (`secure_store.SecureJSON`)
 - Automatic duplicate detection
 - Transaction fingerprinting for uniqueness
-- Import/export functionality (JSON and CSV)
-- Data directory management
+- Import/export functionality (JSON and CSV exports remain plaintext)
+- Data directory mode 0700; data files mode 0600
+- Plaintext files from older versions are migrated on the next load
 
 ### Workflow (`workflow.py`)
 
@@ -186,19 +190,25 @@ The Finance Tracker is a Python application that processes bank statement CSV fi
 - `delete`: Delete a stored transaction by ID
 - `budget`: Manage category budgets (`set`, `list`, `status`, `alerts`, `delete`)
 - `recurring`: Detect and mark recurring transactions (`detect`, `mark`)
+- `report`: Write a local HTML/PDF monthly report with MoM (optional `--notify`)
+- `review`: Import → uncategorized → summary/MoM/cash flow → report
+- `cashflow` / `forecast`: Operating vs transfers; moving-average forecast
+- `schedule`: Install/uninstall/status for the month-end launchd agent
+- `account` / `goal`: Balances (including investments and debts) and targets
 
 ### Web App (`web_app.py`)
 
-**Purpose**: Web-based interface using Eel framework.
+**Purpose**: Web-based interface using Eel, bound to `127.0.0.1` only.
 
 **Features**:
-- Desktop app window (using Microsoft Edge on macOS)
-- Dashboard with charts and statistics
+- Desktop app window (Chrome/Edge `--app=` on macOS; no CDN)
+- Dashboard with charts, month-over-month, cash flow, forecast, and net worth
 - Transaction list with search/filter, edit, delete, split, and bulk actions
 - Category analysis
 - Budget management and alerts
 - Recurring transaction detection
 - Category rules management
+- Review tab: load a month, list uncategorized, generate HTML/PDF
 - CSV import with drag-and-drop
 - Real-time data updates
 
@@ -241,6 +251,26 @@ The Finance Tracker is a Python application that processes bank statement CSV fi
 - Classify weekly / monthly / yearly frequency
 - Confidence score and next-expected date
 - `mark_recurring` uses `model_copy(update=...)` so existing fields are preserved
+
+### Reports (`report.py`)
+
+Self-contained HTML and fpdf2 PDF of a month plus MoM and cash flow. No external assets.
+
+### Notifications (`notify.py`)
+
+macOS Notification Center via `osascript`. Never sends email.
+
+### Scheduler (`scheduler.py`)
+
+Writes `~/Library/LaunchAgents/com.financetracker.monthly-report.plist` to run `report --previous-month --notify --pdf` at 09:00 on the 1st.
+
+### Secure store (`secure_store.py`)
+
+Fernet (`FTENC1` magic) encryption, key in `.key` (0600) or macOS Keychain, directory 0700.
+
+### Accounts (`accounts.py`)
+
+Checking, savings, credit cards, loans, investments, cash. Net worth = assets − liabilities. Goals with progress percent.
 
 ### Category Rules Manager (`category_rules_manager.py`)
 
@@ -308,7 +338,9 @@ SpendingAnalyzer
   ├─► Monthly Summaries
   ├─► Category Breakdowns
   ├─► Spending Patterns
-  └─► Top Categories
+  ├─► Month-over-month deltas
+  ├─► Cash flow (operating vs transfers)
+  └─► Top Categories / forecasts
 ```
 
 ## Design Patterns
@@ -335,7 +367,9 @@ SpendingAnalyzer
 - **Pydantic v2**: Data validation and serialization
 - **Pandas/NumPy**: Data processing (for future enhancements)
 - **Click**: CLI framework
-- **Eel**: Web app framework (desktop app)
+- **cryptography**: Fernet encryption at rest
+- **fpdf2**: Local PDF reports
+- **Eel**: Web app framework (desktop window; host `127.0.0.1`)
 - **PyYAML**: Configuration file parsing
 
 ### Development Tools
@@ -353,13 +387,18 @@ finance_tracker/
 ├── csv_parser.py               # CSV parsing and format detection
 ├── category_mapper.py          # Category mapping rules
 ├── categorizer.py              # Transaction categorization
-├── analyzer.py                 # Spending analysis
+├── analyzer.py                 # Spending analysis (MoM, cash flow, forecast)
+├── report.py                   # HTML/PDF monthly reports
+├── secure_store.py             # Encrypted JSON + file permissions
+├── scheduler.py                # launchd month-end agent
+├── notify.py                   # macOS notifications (no email)
+├── accounts.py                 # Accounts, net worth, goals
 ├── storage.py                  # Data persistence
 ├── workflow.py                 # End-to-end workflows
 ├── config.py                   # Configuration management
 ├── logging_config.py           # Logging setup
 ├── cli.py                      # Command-line interface
-├── web_app.py                  # Web application
+├── web_app.py                  # Web application (localhost)
 ├── transaction_editor.py       # Edit / delete / split / merge
 ├── search_filter.py            # Advanced search
 ├── budget_tracker.py           # Budgets and alerts
@@ -380,16 +419,18 @@ All exceptions include descriptive error messages and context.
 ## Data Storage
 
 ### Current Implementation
-- JSON-based file storage
-- Files stored in `~/.finance-tracker/`
+- Encrypted JSON file storage (`FTENC1` Fernet); key in `.key` or macOS Keychain
+- Files stored in `~/.finance-tracker/` (0700); data files 0600
 - `transactions.json`: All transactions
 - `categories.json`: Custom categories
 - `budgets.json` / `budget_templates.json`: Category budgets
+- `accounts.json` / `goals.json`: Balances and targets
 - `custom_category_rules.json`: User-defined categorization rules
-- `config.yaml`: Application configuration
+- `config.yaml`: Application configuration (0600, not encrypted)
+- `reports/`: Generated HTML/PDF
 
 ### Future Migration Path
-The repository pattern allows easy migration to SQLite or PostgreSQL without changing business logic.
+The repository pattern allows easy migration to SQLCipher without changing business logic.
 
 ## Performance Considerations
 
@@ -401,9 +442,10 @@ The repository pattern allows easy migration to SQLite or PostgreSQL without cha
 ## Security Considerations
 
 - All data stored locally (no cloud sync)
-- No network communication (except Eel's local web server)
-- File-based storage with standard file permissions
-- No encryption (consider for sensitive financial data in future)
+- Eel listens on `127.0.0.1` only
+- Chart.js is vendored; the UI loads no third-party script URLs
+- JSON data encrypted at rest; directory 0700 / files 0600
+- Monthly report delivery is a local macOS notification (no email unless you add it later)
 
 ## Testing Strategy
 

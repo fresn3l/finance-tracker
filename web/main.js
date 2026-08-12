@@ -168,8 +168,148 @@ async function loadDashboard() {
         
         const categoryBreakdown = await eel.get_category_breakdown()();
         updateCategoryChart(categoryBreakdown);
+
+        const mom = await eel.get_month_over_month()();
+        updateMom(mom);
+
+        if (mom && mom.year) {
+            const cash = await eel.get_cash_flow(mom.year, mom.month)();
+            updateCashFlow(cash);
+        }
+        const forecasts = await eel.get_forecasts()();
+        updateForecasts(forecasts);
+        const accounts = await eel.get_accounts()();
+        updateNetWorth(accounts);
+        const goals = await eel.get_goals()();
+        updateGoals(goals);
     } catch (error) {
         console.error('Error loading dashboard:', error);
+    }
+}
+
+function formatDelta(delta) {
+    const amount = parseFloat(delta.delta);
+    const pct = delta.percent_change == null ? 'n/a' : `${delta.percent_change >= 0 ? '+' : ''}${delta.percent_change.toFixed(1)}%`;
+    const cls = amount > 0 ? 'mom-up' : (amount < 0 ? 'mom-down' : '');
+    return `<span class="${cls}">${formatCurrency(delta.delta)} (${pct})</span>`;
+}
+
+function updateMom(mom, totalsId = 'mom-totals', catsId = 'mom-categories') {
+    const totals = document.getElementById(totalsId);
+    const cats = document.getElementById(catsId);
+    if (!totals) return;
+    if (!mom || !mom.year) {
+        totals.innerHTML = '<p>Import at least two months of data to see a comparison.</p>';
+        if (cats) cats.innerHTML = '';
+        return;
+    }
+    const period = `${mom.year}-${String(mom.month).padStart(2, '0')}`;
+    const prev = `${mom.previous_year}-${String(mom.previous_month).padStart(2, '0')}`;
+    totals.innerHTML = `
+        <p>${period} vs ${prev}</p>
+        <table class="mom-table">
+            <tr><th></th><th>${period}</th><th>${prev}</th><th>Change</th></tr>
+            <tr><td>Income</td><td>${formatCurrency(mom.income.current)}</td><td>${formatCurrency(mom.income.previous)}</td><td>${formatDelta(mom.income)}</td></tr>
+            <tr><td>Expenses</td><td>${formatCurrency(mom.expenses.current)}</td><td>${formatCurrency(mom.expenses.previous)}</td><td>${formatDelta(mom.expenses)}</td></tr>
+            <tr><td>Net</td><td>${formatCurrency(mom.net.current)}</td><td>${formatCurrency(mom.net.previous)}</td><td>${formatDelta(mom.net)}</td></tr>
+        </table>`;
+    if (!cats) return;
+    const rows = (mom.category_deltas || []).map(c =>
+        `<tr><td>${c.category}</td><td>${formatCurrency(c.current)}</td><td>${formatCurrency(c.previous)}</td><td>${formatDelta(c)}</td></tr>`
+    ).join('');
+    cats.innerHTML = rows
+        ? `<h4>Categories</h4><table class="mom-table"><tr><th>Category</th><th>${period}</th><th>${prev}</th><th>Change</th></tr>${rows}</table>`
+        : '';
+}
+
+async function runMonthlyReview() {
+    const year = parseInt(document.getElementById('review-year').value, 10) || new Date().getFullYear();
+    const month = parseInt(document.getElementById('review-month').value, 10);
+    const mom = await eel.get_month_over_month(year, month)();
+    const wrap = document.getElementById('review-mom');
+    wrap.innerHTML = '<div id="review-mom-totals"></div><div id="review-mom-cats"></div><div id="review-cashflow"></div>';
+    updateMom(mom, 'review-mom-totals', 'review-mom-cats');
+    const cash = await eel.get_cash_flow(year, month)();
+    const cashEl = document.getElementById('review-cashflow');
+    if (cashEl && cash && cash.net_operating != null) {
+        cashEl.innerHTML = `<p>Operating net ${formatCurrency(cash.net_operating)}; net cash ${formatCurrency(cash.net_cash)} (transfers excluded from operating).</p>`;
+    }
+    const txns = await eel.search_transactions()();
+    const uncat = (txns || []).filter(t => {
+        const parts = (t.date || '').split('-');
+        return Number(parts[0]) === year && Number(parts[1]) === month && !t.category;
+    });
+    const uncatEl = document.getElementById('review-uncategorized');
+    if (uncatEl) {
+        if (uncat.length === 0) {
+            uncatEl.innerHTML = '<p>No uncategorized transactions this month.</p>';
+        } else {
+            uncatEl.innerHTML = '<h4>Uncategorized — fix on the Transactions tab</h4><ul>' +
+                uncat.map(t => `<li>${t.id || ''} ${t.date} ${t.description} ${formatCurrency(t.amount)}</li>`).join('') +
+                '</ul>';
+        }
+    }
+    document.getElementById('review-status').textContent = 'Review loaded. Generate a report when categories look right.';
+}
+
+function updateCashFlow(cash) {
+    const el = document.getElementById('cashflow-card');
+    if (!el) return;
+    if (!cash || cash.net_operating == null) {
+        el.innerHTML = '<p>No cash-flow data yet.</p>';
+        return;
+    }
+    el.innerHTML = `
+        <p>Operating income ${formatCurrency(cash.income)} · expenses ${formatCurrency(cash.expenses)}</p>
+        <p>Net operating ${formatCurrency(cash.net_operating)} · net cash ${formatCurrency(cash.net_cash)}</p>
+        <p>Transfers in ${formatCurrency(cash.transfers_in)} · out ${formatCurrency(cash.transfers_out)}</p>`;
+}
+
+function updateForecasts(forecasts) {
+    const el = document.getElementById('forecast-card');
+    if (!el) return;
+    if (!forecasts || !forecasts.length) {
+        el.innerHTML = '<p>Need at least one month of history to forecast.</p>';
+        return;
+    }
+    const rows = forecasts.slice(0, 6).map(f =>
+        `<tr><td>${f.category || 'Total expenses'}</td><td>${formatCurrency(f.predicted_amount)}</td></tr>`
+    ).join('');
+    el.innerHTML = `<h4>Next-month forecast</h4><table class="mom-table">${rows}</table>`;
+}
+
+function updateNetWorth(payload) {
+    const el = document.getElementById('networth-card');
+    if (!el) return;
+    if (!payload || !payload.accounts || !payload.accounts.length) {
+        el.innerHTML = '<p>Add accounts with <code>finance-tracker account add</code>.</p>';
+        return;
+    }
+    el.innerHTML = `<p>Net worth ${formatCurrency(payload.net_worth)} (${payload.accounts.length} account(s))</p>`;
+}
+
+function updateGoals(goals) {
+    const el = document.getElementById('goals-card');
+    if (!el) return;
+    if (!goals || !goals.length) {
+        el.innerHTML = '';
+        return;
+    }
+    el.innerHTML = '<h4>Goals</h4><ul>' + goals.map(g => {
+        const pct = g.progress_percent == null ? 'n/a' : `${g.progress_percent.toFixed(0)}%`;
+        return `<li>${g.name} (${g.goal_type}) ${pct} of ${formatCurrency(g.target_amount)}</li>`;
+    }).join('') + '</ul>';
+}
+
+async function generateMonthlyReport() {
+    const year = parseInt(document.getElementById('review-year').value, 10) || new Date().getFullYear();
+    const month = parseInt(document.getElementById('review-month').value, 10);
+    const result = await eel.generate_report(year, month, true)();
+    const status = document.getElementById('review-status');
+    if (result.success) {
+        status.textContent = 'Wrote ' + Object.values(result.files).join(', ');
+    } else {
+        status.textContent = 'Error: ' + (result.error || 'unknown');
     }
 }
 

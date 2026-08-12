@@ -202,6 +202,11 @@ summary = analyzer.get_monthly_summary(2024, 1)
 - `get_net_amount(year=None, month=None) -> Decimal`
 - `get_average_monthly_spending(category_name=None) -> Decimal`
 - `get_spending_trend(category_name, months=3) -> Optional[str]`
+- `get_month_over_month(year, month) -> MonthOverMonthComparison`
+- `get_latest_month_over_month() -> Optional[MonthOverMonthComparison]`
+- `get_cash_flow(year, month) -> CashFlowSummary`
+- `forecast_next_month(months=3, category_name=None) -> Optional[SpendingForecast]`
+- `forecast_all_categories(months=3) -> List[SpendingForecast]`
 
 ### Convenience Function
 

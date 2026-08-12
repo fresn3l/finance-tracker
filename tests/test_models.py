@@ -7,7 +7,11 @@ from decimal import Decimal
 import pytest
 
 from finance_tracker.models import (
+    Account,
+    AccountType,
     Category,
+    FinancialGoal,
+    GoalType,
     MonthlySummary,
     SpendingPattern,
     Transaction,
@@ -187,4 +191,25 @@ class TestSpendingPattern:
         assert pattern.transaction_count == 10
         assert pattern.average_transaction == Decimal("50.00")
         assert pattern.percentage_of_total == 25.0
+
+
+class TestAccountAndGoal:
+    def test_account_liability_and_investment(self):
+        card = Account(name="Visa", account_type=AccountType.CREDIT_CARD, balance=Decimal("100"))
+        brokerage = Account(name="Brokerage", account_type=AccountType.INVESTMENT, balance=Decimal("10"))
+        assert card.is_liability
+        assert not card.is_investment
+        assert brokerage.is_investment
+        assert not brokerage.is_liability
+
+    def test_goal_progress(self):
+        goal = FinancialGoal(
+            id="g1",
+            name="Emergency",
+            goal_type=GoalType.SAVINGS,
+            target_amount=Decimal("1000"),
+            current_amount=Decimal("250"),
+        )
+        assert goal.progress_percent == 25.0
+
 

@@ -18,6 +18,10 @@ Available Commands:
     - delete: Delete a stored transaction by ID
     - budget: Manage category budgets (set, list, delete, status, alerts)
     - recurring: Detect and mark recurring transactions
+    - report / review: Local HTML/PDF monthly report with MoM
+    - cashflow / forecast: Operating vs transfers; next-month forecast
+    - schedule: launchd agent for month-end report (macOS)
+    - account / goal: Investments, debts, net worth, and targets
 
 The CLI respects configuration settings and provides helpful error messages.
 
@@ -165,6 +169,9 @@ def summary(ctx: click.Context, year: Optional[int], month: Optional[int]):
                 summary_data.category_breakdown.items(), key=lambda x: x[1], reverse=True
             ):
                 click.echo(f"  {category:20s} ${amount:>10,.2f}")
+
+        mom = analyzer.get_month_over_month(year, month)
+        _print_mom(mom)
     else:
         # Show all monthly summaries
         summaries = analyzer.get_all_monthly_summaries()
@@ -654,6 +661,363 @@ def recurring_mark(ctx: click.Context, min_occurrences: int):
     workflow.storage.transaction_repo._save_all(updated)
     marked = sum(1 for t in updated if t.is_recurring)
     click.echo(f"✓ Marked {marked} transaction(s) as recurring ({len(found)} pattern(s))")
+
+
+def _fmt_pct(value) -> str:
+    if value is None:
+        return "n/a"
+    return f"{value:+.1f}%"
+
+
+def _print_mom(mom) -> None:
+    """Print month-over-month totals and category deltas."""
+    click.echo(
+        f"\nMonth-over-month vs {mom.previous_year}-{mom.previous_month:02d}"
+    )
+    click.echo("=" * 72)
+    click.echo(f"{'':16} {'Current':>14} {'Previous':>14} {'Delta':>14} {'%':>10}")
+    click.echo("-" * 72)
+    for label, delta in (
+        ("Income", mom.income),
+        ("Expenses", mom.expenses),
+        ("Net", mom.net),
+    ):
+        click.echo(
+            f"{label:16} ${delta.current:>12,.2f} ${delta.previous:>12,.2f} "
+            f"${delta.delta:>12,.2f} {_fmt_pct(delta.percent_change):>10}"
+        )
+    if mom.category_deltas:
+        click.echo("\nCategory changes:")
+        for item in mom.category_deltas:
+            click.echo(
+                f"  {item.category:20s} ${item.current:>10,.2f}  "
+                f"{_fmt_pct(item.percent_change):>8}  ({item.delta:+,.2f})"
+            )
+
+
+def _resolve_year_month(year, month, previous_month: bool):
+    today = date.today()
+    if previous_month:
+        if today.month == 1:
+            return today.year - 1, 12
+        return today.year, today.month - 1
+    return year or today.year, month or today.month
+
+
+@cli.command()
+@click.option("--year", type=int, help="Report year")
+@click.option("--month", type=int, help="Report month (1-12)")
+@click.option("--previous-month", is_flag=True, help="Use last calendar month")
+@click.option("--pdf/--no-pdf", default=True, show_default=True)
+@click.option("--html/--no-html", default=True, show_default=True)
+@click.option("--notify", is_flag=True, help="Show a macOS notification when done")
+@click.option(
+    "--output-dir",
+    type=click.Path(path_type=Path),
+    help="Where to write the report (default: data-dir/reports)",
+)
+@click.pass_context
+def report(
+    ctx: click.Context,
+    year: Optional[int],
+    month: Optional[int],
+    previous_month: bool,
+    pdf: bool,
+    html: bool,
+    notify: bool,
+    output_dir: Optional[Path],
+):
+    """Generate a local HTML/PDF monthly report with MoM comparison."""
+    from finance_tracker.notify import notify as send_notification
+    from finance_tracker.report import generate_monthly_report
+
+    year, month = _resolve_year_month(year, month, previous_month)
+    data_dir = ctx.obj["data_dir"]
+    workflow = FinanceTrackerWorkflow(data_dir=data_dir)
+    analyzer = workflow.analyze_spending()
+    dest = output_dir or (data_dir / "reports")
+    formats = tuple(fmt for fmt, on in (("html", html), ("pdf", pdf)) if on)
+    if not formats:
+        click.echo("Error: enable --html and/or --pdf", err=True)
+        raise SystemExit(1)
+
+    result = generate_monthly_report(analyzer, year, month, dest, formats=formats)
+    _print_mom(result["mom"])
+    click.echo("\nWrote:")
+    for kind, path in result["files"].items():
+        click.echo(f"  {kind}: {path}")
+
+    if notify:
+        files = ", ".join(result["files"].values())
+        sent = send_notification(
+            "Finance Tracker",
+            f"Monthly report for {year}-{month:02d} is ready. {files}",
+        )
+        if sent:
+            click.echo("✓ Notification sent")
+        else:
+            click.echo("Notification not sent (macOS Notification Center only)")
+
+
+@cli.command()
+@click.option("--year", type=int)
+@click.option("--month", type=int)
+@click.option("--csv", "csv_file", type=click.Path(exists=True, path_type=Path))
+@click.option("--notify", is_flag=True)
+@click.pass_context
+def review(
+    ctx: click.Context,
+    year: Optional[int],
+    month: Optional[int],
+    csv_file: Optional[Path],
+    notify: bool,
+):
+    """Monthly review: optional import → uncategorized → summary/MoM → report."""
+    from finance_tracker.notify import notify as send_notification
+    from finance_tracker.report import generate_monthly_report
+
+    year, month = _resolve_year_month(year, month, previous_month=False)
+    data_dir = ctx.obj["data_dir"]
+    workflow = FinanceTrackerWorkflow(data_dir=data_dir)
+
+    click.echo(f"\nMonthly review — {year}-{month:02d}")
+    click.echo("=" * 50)
+
+    if csv_file:
+        click.echo(f"\n1. Import {csv_file}")
+        _, stats = workflow.process_csv_file(csv_file)
+        click.echo(f"   Imported {stats['new_transactions']} new transactions")
+    else:
+        click.echo("\n1. Import skipped (pass --csv to import a statement)")
+
+    analyzer = workflow.analyze_spending()
+    month_txns = [
+        t
+        for t in workflow.storage.transaction_repo.load_all()
+        if t.date.year == year and t.date.month == month
+    ]
+    uncategorized = [t for t in month_txns if t.category is None]
+    click.echo(f"\n2. Uncategorized this month: {len(uncategorized)}")
+    for txn in uncategorized[:15]:
+        click.echo(
+            f"   {txn.id or 'N/A':<36} {txn.date} {_truncate(txn.description, 32)} "
+            f"${txn.absolute_amount:,.2f}"
+        )
+    if uncategorized:
+        click.echo("   Fix with: finance-tracker edit <id> --category NAME")
+
+    click.echo("\n3. Summary and month-over-month")
+    summary_data = analyzer.get_monthly_summary(year, month)
+    click.echo(f"   Income ${summary_data.total_income:,.2f}  "
+               f"Expenses ${summary_data.total_expenses:,.2f}  "
+               f"Net ${summary_data.net_amount:,.2f}")
+    mom = analyzer.get_month_over_month(year, month)
+    _print_mom(mom)
+
+    cash = analyzer.get_cash_flow(year, month)
+    click.echo(
+        f"\n   Cash flow — operating net ${cash.net_operating:,.2f}, "
+        f"net cash ${cash.net_cash:,.2f}"
+    )
+
+    click.echo("\n4. Report")
+    result = generate_monthly_report(
+        analyzer, year, month, data_dir / "reports", formats=("html", "pdf")
+    )
+    for kind, path in result["files"].items():
+        click.echo(f"   {kind}: {path}")
+
+    if notify:
+        send_notification(
+            "Finance Tracker",
+            f"Review for {year}-{month:02d} complete. Net ${summary_data.net_amount:,.2f}.",
+        )
+
+
+@cli.command()
+@click.option("--year", type=int)
+@click.option("--month", type=int)
+@click.pass_context
+def cashflow(ctx: click.Context, year: Optional[int], month: Optional[int]):
+    """Show operating cash flow vs transfers for a month."""
+    year, month = _resolve_year_month(year, month, previous_month=False)
+    workflow = FinanceTrackerWorkflow(data_dir=ctx.obj["data_dir"])
+    cash = workflow.analyze_spending().get_cash_flow(year, month)
+    click.echo(f"\nCash flow — {year}-{month:02d}")
+    click.echo("=" * 40)
+    click.echo(f"Operating income:   ${cash.income:,.2f}")
+    click.echo(f"Operating expenses: ${cash.expenses:,.2f}")
+    click.echo(f"Net operating:      ${cash.net_operating:,.2f}")
+    click.echo(f"Transfers in:       ${cash.transfers_in:,.2f}")
+    click.echo(f"Transfers out:      ${cash.transfers_out:,.2f}")
+    click.echo(f"Net cash:           ${cash.net_cash:,.2f}")
+
+
+@cli.command()
+@click.option("--months", default=3, show_default=True)
+@click.option("--category", help="Forecast one category instead of total expenses")
+@click.pass_context
+def forecast(ctx: click.Context, months: int, category: Optional[str]):
+    """Forecast next-month spending (moving average)."""
+    workflow = FinanceTrackerWorkflow(data_dir=ctx.obj["data_dir"])
+    analyzer = workflow.analyze_spending()
+    if category:
+        item = analyzer.forecast_next_month(months=months, category_name=category)
+        items = [item] if item else []
+    else:
+        items = analyzer.forecast_all_categories(months=months)
+    if not items:
+        click.echo("Not enough history to forecast.")
+        return
+    click.echo(f"\nForecast (moving average, last {months} month(s))")
+    click.echo("=" * 60)
+    for item in items:
+        label = item.category or "Total expenses"
+        click.echo(f"  {label:24s} ${item.predicted_amount:>10,.2f}")
+
+
+@cli.group()
+def schedule():
+    """Install a launchd agent that runs the monthly report on the 1st."""
+
+
+@schedule.command("install")
+@click.pass_context
+def schedule_install(ctx: click.Context):
+    """Install the month-end report LaunchAgent (macOS)."""
+    from finance_tracker.scheduler import install
+
+    path = install(data_dir=ctx.obj["data_dir"])
+    click.echo(f"✓ Installed {path}")
+    click.echo("  Runs on the 1st of each month at 09:00 (offline, local report + notification).")
+
+
+@schedule.command("uninstall")
+def schedule_uninstall():
+    """Remove the month-end report LaunchAgent."""
+    from finance_tracker.scheduler import uninstall
+
+    if uninstall():
+        click.echo("✓ Uninstalled monthly report agent")
+    else:
+        click.echo("No agent was installed.")
+
+
+@schedule.command("status")
+def schedule_status():
+    """Show whether the LaunchAgent is installed."""
+    from finance_tracker.scheduler import status
+
+    info = status()
+    click.echo(f"Plist:     {info['plist']}")
+    click.echo(f"Installed: {info['installed']}")
+    click.echo(f"Loaded:    {info['loaded']}")
+
+
+@cli.group()
+def account():
+    """Track checking, savings, credit, loans, and investments."""
+
+
+@account.command("add")
+@click.argument("name")
+@click.option(
+    "--type",
+    "account_type",
+    type=click.Choice(["checking", "savings", "credit_card", "loan", "investment", "cash"]),
+    default="checking",
+)
+@click.option("--balance", default="0")
+@click.option("--institution")
+@click.pass_context
+def account_add(ctx, name, account_type, balance, institution):
+    """Add or update an account balance."""
+    from finance_tracker.accounts import AccountRepository
+    from finance_tracker.models import Account, AccountType
+
+    repo = AccountRepository(ctx.obj["data_dir"])
+    repo.upsert(
+        Account(
+            name=name,
+            account_type=AccountType(account_type),
+            balance=Decimal(balance),
+            institution=institution,
+        )
+    )
+    click.echo(f"✓ Saved account {name} ({account_type}) balance ${Decimal(balance):,.2f}")
+
+
+@account.command("list")
+@click.pass_context
+def account_list(ctx):
+    """List accounts and net worth."""
+    from finance_tracker.accounts import AccountRepository
+
+    repo = AccountRepository(ctx.obj["data_dir"])
+    accounts = repo.load_all()
+    if not accounts:
+        click.echo("No accounts yet. Add one with: finance-tracker account add NAME --type investment")
+        return
+    click.echo(f"\n{'Name':<22} {'Type':<14} {'Balance':>14}")
+    click.echo("-" * 52)
+    for acct in accounts:
+        click.echo(f"{acct.name:<22} {acct.account_type.value:<14} ${acct.balance:>12,.2f}")
+    click.echo(f"\nNet worth: ${repo.net_worth():,.2f}")
+
+
+@cli.group()
+def goal():
+    """Savings, spending, debt, and investment goals."""
+
+
+@goal.command("add")
+@click.argument("name")
+@click.option(
+    "--type",
+    "goal_type",
+    type=click.Choice(["savings", "spend_under", "debt_payoff", "investment"]),
+    default="savings",
+)
+@click.option("--target", required=True)
+@click.option("--current", default="0")
+@click.option("--category")
+@click.pass_context
+def goal_add(ctx, name, goal_type, target, current, category):
+    """Add a financial goal."""
+    from finance_tracker.accounts import GoalRepository
+    from finance_tracker.models import FinancialGoal, GoalType
+
+    repo = GoalRepository(ctx.obj["data_dir"])
+    created = repo.add(
+        FinancialGoal(
+            id="",
+            name=name,
+            goal_type=GoalType(goal_type),
+            target_amount=Decimal(target),
+            current_amount=Decimal(current),
+            category=category,
+        )
+    )
+    click.echo(f"✓ Goal {created.name} ({created.id})")
+
+
+@goal.command("list")
+@click.pass_context
+def goal_list(ctx):
+    """List goals and progress."""
+    from finance_tracker.accounts import GoalRepository
+
+    goals = GoalRepository(ctx.obj["data_dir"]).load_all()
+    if not goals:
+        click.echo("No goals yet.")
+        return
+    click.echo(f"\n{'Name':<22} {'Type':<14} {'Progress':>12} {'Target':>12}")
+    click.echo("-" * 64)
+    for item in goals:
+        pct = f"{item.progress_percent:.0f}%" if item.progress_percent is not None else "n/a"
+        click.echo(
+            f"{item.name:<22} {item.goal_type.value:<14} {pct:>12} ${item.target_amount:>10,.2f}"
+        )
 
 
 def main():

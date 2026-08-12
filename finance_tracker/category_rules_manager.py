@@ -12,6 +12,7 @@ from typing import Dict, List, Optional
 
 from finance_tracker.category_mapper import CategoryMapper, CategoryRule
 from finance_tracker.models import Transaction
+from finance_tracker.secure_store import SecureJSON, ensure_secure_dir
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +28,8 @@ class CategoryRulesManager:
             data_dir: Data directory for storing custom rules
         """
         self.data_dir = Path(data_dir)
-        self.data_dir.mkdir(parents=True, exist_ok=True)
+        ensure_secure_dir(self.data_dir)
+        self.secure = SecureJSON(self.data_dir)
         self.custom_rules_file = self.data_dir / "custom_category_rules.json"
         self.mapper = CategoryMapper()
         self._load_custom_rules()
@@ -38,8 +40,8 @@ class CategoryRulesManager:
             return
 
         try:
-            with open(self.custom_rules_file, "r", encoding="utf-8") as f:
-                data = json.load(f)
+            self.secure.migrate_if_plaintext(self.custom_rules_file)
+            data = self.secure.read(self.custom_rules_file)
 
             for rule_data in data.get("rules", []):
                 try:
@@ -221,8 +223,7 @@ class CategoryRulesManager:
             )
 
         data = {"rules": custom_rules}
-        with open(self.custom_rules_file, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2)
+        self.secure.write(self.custom_rules_file, data)
 
     def export_rules(self, output_file: Path) -> bool:
         """

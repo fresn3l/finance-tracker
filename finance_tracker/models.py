@@ -233,3 +233,141 @@ class SplitTransaction(BaseModel):
         }
     )
 
+
+class ComparisonDelta(BaseModel):
+    """Current vs previous value with dollar and percent change."""
+
+    current: Decimal = Field(..., description="Value in the current period")
+    previous: Decimal = Field(..., description="Value in the previous period")
+    delta: Decimal = Field(..., description="current - previous")
+    percent_change: Optional[float] = Field(
+        None, description="Percent change vs previous; None if previous is zero"
+    )
+
+    model_config = ConfigDict(json_encoders={Decimal: str})
+
+
+class CategoryDelta(BaseModel):
+    """Month-over-month spending change for one category."""
+
+    category: str = Field(..., description="Category name")
+    current: Decimal = Field(..., description="Spending in the current month")
+    previous: Decimal = Field(..., description="Spending in the previous month")
+    delta: Decimal = Field(..., description="current - previous")
+    percent_change: Optional[float] = Field(None, description="Percent change vs previous")
+
+    model_config = ConfigDict(json_encoders={Decimal: str})
+
+
+class MonthOverMonthComparison(BaseModel):
+    """Totals and per-category comparison of one month vs the prior month."""
+
+    year: int
+    month: int
+    previous_year: int
+    previous_month: int
+    income: ComparisonDelta
+    expenses: ComparisonDelta
+    net: ComparisonDelta
+    savings_rate_current: Optional[float] = None
+    savings_rate_previous: Optional[float] = None
+    transaction_count_current: int = 0
+    transaction_count_previous: int = 0
+    category_deltas: list[CategoryDelta] = Field(default_factory=list)
+
+    model_config = ConfigDict(json_encoders={Decimal: str})
+
+
+class CashFlowSummary(BaseModel):
+    """Operating cash flow vs transfers for a month."""
+
+    year: int
+    month: int
+    income: Decimal = Field(default=Decimal("0"), description="Non-transfer credits")
+    expenses: Decimal = Field(default=Decimal("0"), description="Non-transfer debits")
+    transfers_in: Decimal = Field(default=Decimal("0"))
+    transfers_out: Decimal = Field(default=Decimal("0"))
+    net_operating: Decimal = Field(
+        default=Decimal("0"), description="Income minus expenses (excludes transfers)"
+    )
+    net_cash: Decimal = Field(
+        default=Decimal("0"), description="Operating net plus net transfers"
+    )
+
+    model_config = ConfigDict(json_encoders={Decimal: str})
+
+
+class AccountType(str, Enum):
+    """Types of financial accounts."""
+
+    CHECKING = "checking"
+    SAVINGS = "savings"
+    CREDIT_CARD = "credit_card"
+    LOAN = "loan"
+    INVESTMENT = "investment"
+    CASH = "cash"
+
+
+class Account(BaseModel):
+    """A bank, credit, loan, or investment account."""
+
+    name: str
+    account_type: AccountType = AccountType.CHECKING
+    institution: Optional[str] = None
+    balance: Decimal = Field(default=Decimal("0"))
+    notes: Optional[str] = None
+
+    @property
+    def is_liability(self) -> bool:
+        """Credit cards and loans reduce net worth."""
+        return self.account_type in {AccountType.CREDIT_CARD, AccountType.LOAN}
+
+    @property
+    def is_investment(self) -> bool:
+        return self.account_type == AccountType.INVESTMENT
+
+    model_config = ConfigDict(json_encoders={Decimal: str})
+
+
+class GoalType(str, Enum):
+    """What a financial goal is tracking."""
+
+    SAVINGS = "savings"
+    SPEND_UNDER = "spend_under"
+    DEBT_PAYOFF = "debt_payoff"
+    INVESTMENT = "investment"
+
+
+class FinancialGoal(BaseModel):
+    """A savings, spending, debt, or investment target."""
+
+    id: str
+    name: str
+    goal_type: GoalType
+    target_amount: Decimal
+    current_amount: Decimal = Field(default=Decimal("0"))
+    target_date: Optional[datetime.date] = None
+    category: Optional[str] = Field(None, description="Category for spend_under goals")
+    notes: Optional[str] = None
+
+    @property
+    def progress_percent(self) -> Optional[float]:
+        """Percent of target reached (0-100+)."""
+        if self.target_amount == 0:
+            return None
+        return float((self.current_amount / self.target_amount) * 100)
+
+    model_config = ConfigDict(json_encoders={Decimal: str})
+
+
+class SpendingForecast(BaseModel):
+    """Simple moving-average forecast for next month."""
+
+    category: Optional[str] = Field(None, description="None means total expenses")
+    predicted_amount: Decimal
+    months_used: int
+    method: str = "moving_average"
+    average_monthly: Decimal
+
+    model_config = ConfigDict(json_encoders={Decimal: str})
+

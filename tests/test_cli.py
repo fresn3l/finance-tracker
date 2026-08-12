@@ -165,3 +165,147 @@ class TestCliLaterFeatures:
         assert "Marked" in mark.output
         loaded = repo.load_all()
         assert all(t.is_recurring for t in loaded)
+
+
+def _seed_two_months(tmp_path) -> None:
+    repo = TransactionRepository(tmp_path)
+    repo.save(
+        [
+            Transaction(
+                date=date(2024, 1, 2),
+                amount=Decimal("3000.00"),
+                description="Salary",
+                transaction_type=TransactionType.CREDIT,
+                id="sal-jan",
+            ),
+            Transaction(
+                date=date(2024, 1, 5),
+                amount=Decimal("-100.00"),
+                description="GROCERY STORE",
+                transaction_type=TransactionType.DEBIT,
+                category=Category(name="Groceries", parent="Food & Dining"),
+                id="groc-jan",
+            ),
+            Transaction(
+                date=date(2024, 2, 2),
+                amount=Decimal("3000.00"),
+                description="Salary",
+                transaction_type=TransactionType.CREDIT,
+                id="sal-feb",
+            ),
+            Transaction(
+                date=date(2024, 2, 5),
+                amount=Decimal("-150.00"),
+                description="GROCERY STORE",
+                transaction_type=TransactionType.DEBIT,
+                category=Category(name="Groceries", parent="Food & Dining"),
+                id="groc-feb",
+            ),
+        ]
+    )
+
+
+class TestCliMomReportAndReview:
+    def test_summary_prints_month_over_month(self, tmp_path):
+        _seed_two_months(tmp_path)
+        runner = CliRunner()
+        result = runner.invoke(
+            cli, ["--data-dir", str(tmp_path), "summary", "--year", "2024", "--month", "2"]
+        )
+        assert result.exit_code == 0
+        assert "Month-over-month vs 2024-01" in result.output
+        assert "Expenses" in result.output
+        assert "Groceries" in result.output
+
+    def test_report_writes_html_and_pdf(self, tmp_path):
+        _seed_two_months(tmp_path)
+        out = tmp_path / "reports"
+        runner = CliRunner()
+        result = runner.invoke(
+            cli,
+            [
+                "--data-dir",
+                str(tmp_path),
+                "report",
+                "--year",
+                "2024",
+                "--month",
+                "2",
+                "--output-dir",
+                str(out),
+            ],
+        )
+        assert result.exit_code == 0
+        assert (out / "report-2024-02.html").exists()
+        assert (out / "report-2024-02.pdf").exists()
+        assert "Wrote:" in result.output
+
+    def test_review_workflow(self, tmp_path):
+        _seed_two_months(tmp_path)
+        runner = CliRunner()
+        result = runner.invoke(
+            cli, ["--data-dir", str(tmp_path), "review", "--year", "2024", "--month", "2"]
+        )
+        assert result.exit_code == 0
+        assert "Monthly review — 2024-02" in result.output
+        assert "Uncategorized this month" in result.output
+        assert "Month-over-month" in result.output
+        assert "Cash flow" in result.output
+        assert (tmp_path / "reports" / "report-2024-02.html").exists()
+
+    def test_cashflow_and_forecast(self, tmp_path):
+        _seed_two_months(tmp_path)
+        runner = CliRunner()
+        cash = runner.invoke(
+            cli, ["--data-dir", str(tmp_path), "cashflow", "--year", "2024", "--month", "2"]
+        )
+        assert cash.exit_code == 0
+        assert "Net operating" in cash.output
+
+        forecast = runner.invoke(cli, ["--data-dir", str(tmp_path), "forecast"])
+        assert forecast.exit_code == 0
+        assert "Total expenses" in forecast.output
+
+    def test_account_and_goal(self, tmp_path):
+        runner = CliRunner()
+        add_acct = runner.invoke(
+            cli,
+            [
+                "--data-dir",
+                str(tmp_path),
+                "account",
+                "add",
+                "Brokerage",
+                "--type",
+                "investment",
+                "--balance",
+                "10000",
+            ],
+        )
+        assert add_acct.exit_code == 0
+        listed = runner.invoke(cli, ["--data-dir", str(tmp_path), "account", "list"])
+        assert listed.exit_code == 0
+        assert "Brokerage" in listed.output
+        assert "Net worth" in listed.output
+
+        add_goal = runner.invoke(
+            cli,
+            [
+                "--data-dir",
+                str(tmp_path),
+                "goal",
+                "add",
+                "Emergency fund",
+                "--type",
+                "savings",
+                "--target",
+                "5000",
+                "--current",
+                "1000",
+            ],
+        )
+        assert add_goal.exit_code == 0
+        goals = runner.invoke(cli, ["--data-dir", str(tmp_path), "goal", "list"])
+        assert goals.exit_code == 0
+        assert "Emergency fund" in goals.output
+

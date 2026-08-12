@@ -8,7 +8,6 @@ This module provides budget management functionality including:
 - Budget templates for quick setup
 """
 
-import json
 import logging
 from decimal import Decimal
 from pathlib import Path
@@ -16,7 +15,7 @@ from typing import Dict, List, Optional
 
 from finance_tracker.analyzer import SpendingAnalyzer
 from finance_tracker.models import Budget, BudgetTemplate, Transaction
-from finance_tracker.storage import JSONEncoder
+from finance_tracker.secure_store import SecureJSON, ensure_secure_dir
 
 logger = logging.getLogger(__name__)
 
@@ -24,15 +23,17 @@ logger = logging.getLogger(__name__)
 class BudgetRepository:
     """Repository for managing budget storage."""
 
-    def __init__(self, data_dir: Path):
+    def __init__(self, data_dir: Path, secure: Optional[SecureJSON] = None):
         """
         Initialize budget repository.
 
         Args:
             data_dir: Directory where budget data is stored
+            secure: Optional encrypted JSON helper
         """
         self.data_dir = Path(data_dir)
-        self.data_dir.mkdir(parents=True, exist_ok=True)
+        ensure_secure_dir(self.data_dir)
+        self.secure = secure or SecureJSON(self.data_dir)
         self.budgets_file = self.data_dir / "budgets.json"
         self.templates_file = self.data_dir / "budget_templates.json"
 
@@ -68,8 +69,8 @@ class BudgetRepository:
             return []
 
         try:
-            with open(self.budgets_file, "r", encoding="utf-8") as f:
-                data = json.load(f)
+            self.secure.migrate_if_plaintext(self.budgets_file)
+            data = self.secure.read(self.budgets_file)
 
             budgets = []
             for budget_data in data.get("budgets", []):
@@ -155,8 +156,7 @@ class BudgetRepository:
                 for b in budgets
             ]
         }
-        with open(self.budgets_file, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2, cls=JSONEncoder)
+        self.secure.write(self.budgets_file, data)
 
     def save_template(self, template: BudgetTemplate) -> None:
         """
@@ -182,8 +182,8 @@ class BudgetRepository:
             return []
 
         try:
-            with open(self.templates_file, "r", encoding="utf-8") as f:
-                data = json.load(f)
+            self.secure.migrate_if_plaintext(self.templates_file)
+            data = self.secure.read(self.templates_file)
 
             templates = []
             for template_data in data.get("templates", []):
@@ -215,8 +215,7 @@ class BudgetRepository:
                 for t in templates
             ]
         }
-        with open(self.templates_file, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2, cls=JSONEncoder)
+        self.secure.write(self.templates_file, data)
 
 
 class BudgetTracker:

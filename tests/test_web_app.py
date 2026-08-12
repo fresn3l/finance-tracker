@@ -39,3 +39,50 @@ class TestGetTransactions:
         assert txn["is_recurring"] is True
         assert txn["notes"] == "weekly shop"
         assert txn["category"]["name"] == "Groceries"
+
+
+class TestMonthOverMonthEndpoint:
+    def test_get_month_over_month_and_cash_flow(self, tmp_path):
+        web_app.workflow = None
+        web_app.init_workflow(tmp_path)
+        TransactionRepository(tmp_path).save(
+            [
+                Transaction(
+                    date=date(2024, 1, 5),
+                    amount=Decimal("-40.00"),
+                    description="GROCERY",
+                    transaction_type=TransactionType.DEBIT,
+                    category=Category(name="Groceries"),
+                    id="jan",
+                ),
+                Transaction(
+                    date=date(2024, 2, 5),
+                    amount=Decimal("-50.00"),
+                    description="GROCERY",
+                    transaction_type=TransactionType.DEBIT,
+                    category=Category(name="Groceries"),
+                    id="feb",
+                ),
+            ]
+        )
+
+        mom = web_app.get_month_over_month(2024, 2)
+        assert mom["year"] == 2024
+        assert mom["month"] == 2
+        assert mom["previous_month"] == 1
+        assert mom["expenses"]["current"] == "50.00"
+        assert mom["expenses"]["previous"] == "40.00"
+        assert any(c["category"] == "Groceries" for c in mom["category_deltas"])
+
+        cash = web_app.get_cash_flow(2024, 2)
+        assert cash["expenses"] == "50.00"
+        assert cash["net_operating"] == "-50.00"
+
+        forecasts = web_app.get_forecasts()
+        assert forecasts
+        assert forecasts[0]["category"] is None
+
+        report = web_app.generate_report(2024, 2, notify=False)
+        assert report["success"] is True
+        assert "html" in report["files"]
+

@@ -33,6 +33,7 @@ Or from command line:
 
 import logging
 import subprocess
+import sys
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -856,6 +857,185 @@ def test_rule_against_transactions(pattern: str, limit: int = 10) -> List[Dict]:
         return []
 
 
+@eel.expose
+def get_month_over_month(year: Optional[int] = None, month: Optional[int] = None) -> Dict:
+    """MoM comparison for a month, or the latest month with data."""
+    if workflow is None:
+        init_workflow()
+    try:
+        analyzer = workflow.analyze_spending()
+        if year and month:
+            mom = analyzer.get_month_over_month(year, month)
+        else:
+            mom = analyzer.get_latest_month_over_month()
+        if mom is None:
+            return {}
+        return _mom_to_dict(mom)
+    except Exception as e:
+        logger.error(f"Error getting MoM: {e}", exc_info=True)
+        return {}
+
+
+@eel.expose
+def get_cash_flow(year: int, month: int) -> Dict:
+    """Operating cash flow vs transfers for a month."""
+    if workflow is None:
+        init_workflow()
+    try:
+        cash = workflow.analyze_spending().get_cash_flow(year, month)
+        return {
+            "year": cash.year,
+            "month": cash.month,
+            "income": str(cash.income),
+            "expenses": str(cash.expenses),
+            "transfers_in": str(cash.transfers_in),
+            "transfers_out": str(cash.transfers_out),
+            "net_operating": str(cash.net_operating),
+            "net_cash": str(cash.net_cash),
+        }
+    except Exception as e:
+        logger.error(f"Error getting cash flow: {e}", exc_info=True)
+        return {}
+
+
+@eel.expose
+def get_forecasts(months: int = 3) -> List[Dict]:
+    """Moving-average spending forecasts."""
+    if workflow is None:
+        init_workflow()
+    try:
+        forecasts = workflow.analyze_spending().forecast_all_categories(months=months)
+        return [
+            {
+                "category": f.category,
+                "predicted_amount": str(f.predicted_amount),
+                "months_used": f.months_used,
+            }
+            for f in forecasts
+        ]
+    except Exception as e:
+        logger.error(f"Error getting forecasts: {e}", exc_info=True)
+        return []
+
+
+@eel.expose
+def get_accounts() -> Dict:
+    """List accounts and net worth (assets minus credit cards and loans)."""
+    if workflow is None:
+        init_workflow()
+    try:
+        from finance_tracker.accounts import AccountRepository
+
+        repo = AccountRepository(workflow.storage.data_dir)
+        accounts = repo.load_all()
+        return {
+            "accounts": [
+                {
+                    "name": a.name,
+                    "account_type": a.account_type.value,
+                    "institution": a.institution,
+                    "balance": str(a.balance),
+                    "is_liability": a.is_liability,
+                }
+                for a in accounts
+            ],
+            "net_worth": str(repo.net_worth()),
+        }
+    except Exception as e:
+        logger.error(f"Error getting accounts: {e}", exc_info=True)
+        return {"accounts": [], "net_worth": "0"}
+
+
+@eel.expose
+def get_goals() -> List[Dict]:
+    """List savings, spending, debt, and investment goals."""
+    if workflow is None:
+        init_workflow()
+    try:
+        from finance_tracker.accounts import GoalRepository
+
+        goals = GoalRepository(workflow.storage.data_dir).load_all()
+        return [
+            {
+                "id": g.id,
+                "name": g.name,
+                "goal_type": g.goal_type.value,
+                "target_amount": str(g.target_amount),
+                "current_amount": str(g.current_amount),
+                "progress_percent": g.progress_percent,
+                "category": g.category,
+            }
+            for g in goals
+        ]
+    except Exception as e:
+        logger.error(f"Error getting goals: {e}", exc_info=True)
+        return []
+
+
+@eel.expose
+def generate_report(year: int, month: int, notify: bool = False) -> Dict:
+    """Write HTML+PDF report for a month and optionally notify."""
+    if workflow is None:
+        init_workflow()
+    try:
+        from finance_tracker.notify import notify as send_notification
+        from finance_tracker.report import generate_monthly_report
+
+        analyzer = workflow.analyze_spending()
+        dest = workflow.storage.data_dir / "reports"
+        result = generate_monthly_report(analyzer, year, month, dest, formats=("html", "pdf"))
+        if notify:
+            send_notification(
+                "Finance Tracker",
+                f"Monthly report for {year}-{month:02d} is ready.",
+            )
+        return {"success": True, "files": result["files"]}
+    except Exception as e:
+        logger.error(f"Error generating report: {e}", exc_info=True)
+        return {"success": False, "error": str(e)}
+
+
+def _mom_to_dict(mom) -> Dict:
+    def delta(d):
+        return {
+            "current": str(d.current),
+            "previous": str(d.previous),
+            "delta": str(d.delta),
+            "percent_change": d.percent_change,
+        }
+
+    return {
+        "year": mom.year,
+        "month": mom.month,
+        "previous_year": mom.previous_year,
+        "previous_month": mom.previous_month,
+        "income": delta(mom.income),
+        "expenses": delta(mom.expenses),
+        "net": delta(mom.net),
+        "savings_rate_current": mom.savings_rate_current,
+        "savings_rate_previous": mom.savings_rate_previous,
+        "transaction_count_current": mom.transaction_count_current,
+        "transaction_count_previous": mom.transaction_count_previous,
+        "category_deltas": [
+            {
+                "category": c.category,
+                "current": str(c.current),
+                "previous": str(c.previous),
+                "delta": str(c.delta),
+                "percent_change": c.percent_change,
+            }
+            for c in mom.category_deltas
+        ],
+    }
+
+
+def _web_dir() -> Path:
+    """Resolve the web/ frontend, including PyInstaller frozen builds."""
+    if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+        return Path(sys._MEIPASS) / "web"
+    return Path(__file__).parent.parent / "web"
+
+
 def _transaction_to_dict(transaction) -> Dict:
     """Helper to convert transaction to dictionary."""
     result = {
@@ -895,67 +1075,61 @@ def start_web_app(port: int = 8080, size: tuple = (1200, 800)) -> None:
     # Initialize workflow
     init_workflow()
 
-    # Get web directory
-    web_dir = Path(__file__).parent.parent / "web"
+    web_dir = _web_dir()
 
-    logger.info(f"Starting web app on port {port}")
+    logger.info(f"Starting web app on 127.0.0.1:{port}")
     logger.info(f"Web directory: {web_dir}")
 
-    # Start Eel
     eel.init(str(web_dir))
 
-    # Configure for Microsoft Edge on macOS
+    import socket
+
+    def is_port_available(port_num):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            return s.connect_ex(("127.0.0.1", port_num)) != 0
+
+    actual_port = port
+    if not is_port_available(port):
+        for p in range(port, port + 10):
+            if is_port_available(p):
+                actual_port = p
+                logger.info(f"Port {port} in use, using port {actual_port} instead")
+                break
+        else:
+            logger.error(f"Could not find available port starting from {port}")
+            return
+
+    url = f"http://127.0.0.1:{actual_port}/index.html"
     edge_path = "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge"
+    chrome_path = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 
-    # Start the app
-    try:
-        if Path(edge_path).exists():
-            # For macOS, we need to manually launch Edge since Eel's edge mode is Windows-only
-            logger.info(f"Using Microsoft Edge at {edge_path}")
+    def launch_app_window():
+        import time
 
-            # Check if port is available, if not try next port
-            import socket
-            def is_port_available(port_num):
-                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                    return s.connect_ex(('localhost', port_num)) != 0
-
-            actual_port = port
-            if not is_port_available(port):
-                # Try next few ports
-                for p in range(port, port + 10):
-                    if is_port_available(p):
-                        actual_port = p
-                        logger.info(f"Port {port} in use, using port {actual_port} instead")
-                        break
-                else:
-                    logger.error(f"Could not find available port starting from {port}")
-                    return
-
-            # Launch Edge after a short delay to allow server to start
-            import threading
-            import time
-
-            def launch_edge_delayed():
-                time.sleep(1.5)  # Wait for server to start
-                url = f"http://localhost:{actual_port}/index.html"
-                logger.info(f"Launching Edge with URL: {url}")
+        time.sleep(1.5)
+        for browser in (edge_path, chrome_path):
+            if Path(browser).exists():
+                logger.info("Launching app window: %s", browser)
                 subprocess.Popen(
-                    [edge_path, "--new-window", url],
+                    [browser, f"--app={url}"],
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
-                    stdin=subprocess.PIPE
+                    stdin=subprocess.PIPE,
                 )
+                return
+        logger.warning("No Chrome/Edge found; open %s in a local browser", url)
 
-            # Launch Edge in background thread
-            edge_thread = threading.Thread(target=launch_edge_delayed, daemon=True)
-            edge_thread.start()
+    try:
+        import threading
 
-            # Start Eel server (this blocks)
-            eel.start("index.html", size=size, port=actual_port, mode=None, host="localhost")
-        else:
-            # Fallback to default browser if Edge not found
-            logger.warning(f"Edge not found at {edge_path}, using default browser")
-            eel.start("index.html", size=size, port=port)
+        threading.Thread(target=launch_app_window, daemon=True).start()
+        eel.start(
+            "index.html",
+            size=size,
+            port=actual_port,
+            mode=None,
+            host="127.0.0.1",
+        )
     except (SystemExit, MemoryError, KeyboardInterrupt):
         logger.info("Web app closed")
 

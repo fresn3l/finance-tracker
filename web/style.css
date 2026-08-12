@@ -121,6 +121,22 @@ body {
     color: var(--danger-color);
 }
 
+.mom-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 12px;
+}
+
+.mom-table th,
+.mom-table td {
+    text-align: left;
+    padding: 8px 10px;
+    border-bottom: 1px solid #333;
+}
+
+.mom-up { color: var(--warning-color); }
+.mom-down { color: var(--success-color); }
+
 /* Charts */
 .charts-grid {
     display: grid;

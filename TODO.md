@@ -24,34 +24,33 @@ This list tracks what is implemented versus what is still missing. Prefer this f
 - [X] Custom category rules manager (add/test/import/export)
 - [X] MIT LICENSE and GitHub Actions CI
 
+### Reporting, analysis extras, security, Mac packaging
+- [X] Month-over-month comparison (totals and per-category $ / % deltas) in analyzer, CLI `summary`, and dashboard
+- [X] Cash flow (operating vs transfers), spending forecasts, accounts/net worth, and goals
+- [X] Monthly review workflow: import → uncategorized → summary/MoM → local HTML/PDF report
+- [X] Monthly report generation (self-contained HTML + PDF) with macOS Notification Center delivery (no email)
+- [X] launchd agent (`finance-tracker schedule install`) — 1st of the month at 09:00, fully offline
+- [X] Encryption at rest for JSON data (`FTENC1` Fernet; key in `.key` 0600 or macOS Keychain)
+- [X] Data directory 0700 / data files 0600; config.yaml 0600
+- [X] Vendored Chart.js (no CDN); Eel bound to `127.0.0.1` only
+- [X] Mac app packaging scaffolding (PyInstaller spec + py2app setup; build on macOS)
+
 ## 🔄 Still missing (product gaps)
 
-These are the remaining pieces for a local, secure Mac app that sends a monthly report with month-over-month comparison.
-
 ### Reporting
-- [ ] Month-over-month comparison (totals and per-category $ / % deltas)
-- [ ] Monthly report generation (HTML/PDF)
-- [ ] Scheduled delivery (launchd / local notification; optional email)
 - [ ] Year-over-year comparison
 
 ### Mac app & packaging
-- [ ] Native Mac app bundle (`.app`), not Python + Edge
-- [ ] Offline charts (vendor Chart.js; drop the CDN)
-- [ ] Homebrew formula / standalone executable
-
-### Security
-- [ ] Encryption at rest for `~/.finance-tracker/` data
-- [ ] Tighten local file permissions
-- [ ] Keep the UI fully offline (no third-party script URLs)
+- [ ] Signed/notarized `.app` built on macOS (scaffolding is in `packaging/`)
+- [ ] Homebrew formula
 
 ### Analysis extras
-- [ ] First-class multi-account / net worth / transfer detection
-- [ ] Spending forecasts and goals
+- [ ] Full portfolio / amortization engines (accounts today are balances + net worth)
 - [ ] Learn from user category corrections
 
 ## 📚 Docs & quality (ongoing)
 
 - [X] Architecture, API, and getting-started docs (keep in sync with code)
-- [X] Tests for editor, budgets, recurring detection, CLI, and web transaction IDs
+- [X] Tests for editor, budgets, recurring detection, CLI, web transaction IDs, MoM, reports, encryption
 - [ ] Performance tests for large datasets
 - [ ] Property-based tests for CSV edge cases

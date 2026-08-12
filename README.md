@@ -11,12 +11,18 @@ A comprehensive finance tracker and organizer application that processes monthly
 - 📋 **Multiple Interfaces**: Both CLI and web application interfaces
 - 🔍 **Duplicate Detection**: Automatically detects and handles duplicate transactions
 - 📤 **Export Functionality**: Export data to JSON or CSV formats
-- 📊 **Visualizations**: Interactive charts and graphs in the web interface
+- 📊 **Visualizations**: Interactive charts (vendored Chart.js, fully offline)
+- 📉 **Month-over-month**: Category and totals deltas in CLI `summary` and the dashboard
+- 🧾 **Monthly reports**: Local HTML/PDF plus an optional macOS notification (no email)
+- 🗓️ **Scheduled review**: launchd agent after month-end, fully offline
+- 🏦 **Accounts & cash flow**: Investments, debts, net worth, operating vs transfers
+- 🎯 **Forecasts & goals**: Moving-average next-month forecast and savings/debt targets
+- 🔒 **Encrypted local store**: Fernet-encrypted JSON, 0700/0600 permissions, localhost-only UI
 
 ## Requirements
 
 - Python 3.9 or higher
-- Microsoft Edge (for web app on macOS) or any modern browser
+- On macOS: Chrome or Edge only if you want the desktop window (the engine is local Python)
 
 ## Installation
 
@@ -77,6 +83,22 @@ finance-tracker budget alerts --year 2024 --month 1
 finance-tracker recurring detect
 finance-tracker recurring mark
 
+# Month-over-month is included when you pass a month
+finance-tracker summary --year 2024 --month 2
+
+# Monthly review: optional import → uncategorized → MoM → HTML/PDF
+finance-tracker review --year 2024 --month 1
+finance-tracker report --year 2024 --month 1 --notify
+
+# Cash flow, forecast, accounts, goals
+finance-tracker cashflow --year 2024 --month 1
+finance-tracker forecast
+finance-tracker account add Brokerage --type investment --balance 10000
+finance-tracker goal add "Emergency fund" --type savings --target 5000
+
+# After month-end (macOS): local report + Notification Center
+finance-tracker schedule install
+
 # Export transactions
 finance-tracker export transactions.json --format json
 
@@ -98,12 +120,13 @@ python -m finance_tracker.web_app
 ```
 
 The web app provides:
-- 📊 **Dashboard**: Statistics, charts, and monthly summaries
+- 📊 **Dashboard**: Statistics, charts, month-over-month, cash flow, forecast, net worth
 - 📝 **Transactions**: Searchable, filterable list with edit / delete / split / bulk actions
 - 🏷️ **Categories**: Category breakdown and analysis
 - 💰 **Budgets**: Per-category monthly budgets and alerts
 - 🔄 **Recurring**: Detect subscriptions and bills
 - ⚙️ **Rules**: Add and test custom categorization rules
+- 📋 **Review**: Load a month, fix categories, generate a local HTML/PDF report
 - 📤 **Import**: Drag-and-drop CSV file import
 
 ## Usage Guide
@@ -133,11 +156,14 @@ finance-tracker import-csv bank_statement.csv --overwrite
 ### Viewing Summaries
 
 ```bash
-# View specific month
+# View specific month (includes month-over-month vs the prior month)
 finance-tracker summary --year 2024 --month 1
 
 # View all monthly summaries
 finance-tracker summary
+
+# Local HTML/PDF report
+finance-tracker report --year 2024 --month 1
 ```
 
 ### Managing Categories
@@ -201,6 +227,7 @@ You can customize:
 - Logging level and file location
 - Auto-categorization settings
 - Duplicate detection settings
+- `security.encryption` (default `true`) — JSON data files are encrypted at rest
 
 ## Project Structure
 
@@ -211,16 +238,22 @@ finance-tracker/
 │   ├── csv_parser.py     # CSV parsing
 │   ├── category_mapper.py # Category rules
 │   ├── categorizer.py    # Categorization engine
-│   ├── analyzer.py       # Spending analysis
+│   ├── analyzer.py       # Spending analysis (including MoM)
+│   ├── report.py         # HTML/PDF monthly reports
+│   ├── secure_store.py   # Fernet JSON encryption + file perms
+│   ├── scheduler.py      # launchd month-end agent
+│   ├── notify.py         # macOS Notification Center
+│   ├── accounts.py       # Accounts, net worth, goals
 │   ├── storage.py        # Data persistence
 │   ├── workflow.py       # End-to-end workflows
 │   ├── cli.py            # Command-line interface
-│   ├── web_app.py        # Web application
+│   ├── web_app.py        # Web application (127.0.0.1)
 │   ├── transaction_editor.py
 │   ├── search_filter.py
 │   ├── budget_tracker.py
 │   ├── recurring_detector.py
 │   └── category_rules_manager.py
+├── packaging/            # PyInstaller / py2app Mac app
 ├── tests/                # Test suite
 ├── sample_data/          # Sample CSV files
 ├── docs/                 # Documentation
@@ -230,7 +263,8 @@ finance-tracker/
 ├── web/                  # Web app frontend
 │   ├── index.html
 │   ├── style.css
-│   └── main.js
+│   ├── main.js
+│   └── vendor/           # Chart.js (offline)
 ├── .github/workflows/    # CI
 ├── LICENSE               # MIT
 └── README.md
@@ -303,13 +337,15 @@ The application automatically detects and supports:
 
 ## Data Storage
 
-All data is stored locally in `~/.finance-tracker/`:
-- `transactions.json`: All transactions
-- `categories.json`: Custom categories
-- `budgets.json`: Category budgets
-- `custom_category_rules.json`: User-defined categorization rules
-- `config.yaml`: Application configuration
-- `exports/`: Exported data files
+All data is stored locally in `~/.finance-tracker/` (directory mode 0700). JSON payloads are encrypted at rest (`FTENC1` + Fernet). The key is `~/.finance-tracker/.key` (mode 0600), copied into the macOS Keychain when available. Exports you explicitly write stay plaintext.
+
+- `transactions.json`, `categories.json`, `budgets.json`, `accounts.json`, `goals.json`: encrypted JSON
+- `config.yaml`: YAML (mode 0600), not encrypted
+- `reports/`: generated HTML/PDF monthly reports
+- `exports/`: plaintext exports you request
+- `.key`: encryption key
+
+See [packaging/README.md](packaging/README.md) to build a Mac `.app` on macOS.
 
 ## Troubleshooting
 
