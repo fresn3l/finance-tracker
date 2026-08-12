@@ -9,7 +9,7 @@ The items below were the original gaps. **Transaction editing, budgets, recurrin
 ### 1. **Transaction Editing & Management** — implemented
 Edit, delete, split, merge, and bulk edit are available in the web Transactions tab and via `finance-tracker edit` / `delete`.
 
-Still open: merge UX in the web UI, and learning from corrections.
+Still open: merge UX in the web UI. Category corrections now learn merchant mappings for later imports.
 
 ### 2. **Budget Tracking & Alerts** — implemented (in-app)
 Set/list/delete budgets and view alerts in the web Budgets tab and `finance-tracker budget`.

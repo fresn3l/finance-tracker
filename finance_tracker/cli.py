@@ -404,7 +404,7 @@ def edit(
 
     data_dir = ctx.obj["data_dir"]
     workflow = FinanceTrackerWorkflow(data_dir=data_dir)
-    editor = TransactionEditor(workflow.storage.transaction_repo)
+    editor = TransactionEditor(workflow.storage.transaction_repo, learner=workflow.learner)
 
     parsed_amount = Decimal(amount) if amount is not None else None
     parsed_date = datetime.fromisoformat(txn_date).date() if txn_date else None
@@ -440,7 +440,7 @@ def delete_transaction(ctx: click.Context, transaction_id: str, yes: bool):
     """Delete a stored transaction by ID."""
     data_dir = ctx.obj["data_dir"]
     workflow = FinanceTrackerWorkflow(data_dir=data_dir)
-    editor = TransactionEditor(workflow.storage.transaction_repo)
+    editor = TransactionEditor(workflow.storage.transaction_repo, learner=workflow.learner)
 
     existing = workflow.storage.transaction_repo.get_by_id(transaction_id)
     if not existing:

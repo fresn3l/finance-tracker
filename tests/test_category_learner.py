@@ -115,6 +115,19 @@ class TestCategoryLearner:
         assert found is not None
         assert found.name == "Subscriptions"
 
+    def test_same_session_edit_updates_workflow_learner(self, tmp_path):
+        workflow = FinanceTrackerWorkflow(data_dir=tmp_path)
+        workflow.storage.transaction_repo.save([_debit("NEW MERCHANT XYZ", "n1")])
+        editor = TransactionEditor(
+            workflow.storage.transaction_repo, learner=workflow.learner
+        )
+        editor.edit_transaction(
+            "n1", category=Category(name="Groceries", parent="Food & Dining")
+        )
+        found = workflow.learner.lookup("NEW MERCHANT XYZ #2")
+        assert found is not None
+        assert found.name == "Groceries"
+
     def test_recategorize_persists_learned_and_keeps_id(self, tmp_path):
         repo = TransactionRepository(tmp_path)
         repo.save([_debit("ZEPHYR MARKET", "z1")])

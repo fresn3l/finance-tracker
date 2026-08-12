@@ -55,6 +55,14 @@ logger = logging.getLogger(__name__)
 workflow: Optional[FinanceTrackerWorkflow] = None
 
 
+def _transaction_editor() -> TransactionEditor:
+    """Edit through the live workflow learner so corrections apply this session."""
+    if workflow is None:
+        init_workflow()
+    assert workflow is not None
+    return TransactionEditor(workflow.storage.transaction_repo, learner=workflow.learner)
+
+
 def init_workflow(data_dir: Optional[Path] = None) -> None:
     """Initialize the workflow instance."""
     global workflow
@@ -380,7 +388,7 @@ def edit_transaction(
         from datetime import datetime
         from decimal import Decimal
 
-        editor = TransactionEditor(workflow.storage.transaction_repo)
+        editor = _transaction_editor()
         category = None
         if category_name:
             category = Category(name=category_name, parent=category_parent)
@@ -417,7 +425,7 @@ def delete_transaction(transaction_id: str) -> Dict:
         init_workflow()
 
     try:
-        editor = TransactionEditor(workflow.storage.transaction_repo)
+        editor = _transaction_editor()
         success = editor.delete_transaction(transaction_id)
         return {"success": success}
     except Exception as e:
@@ -432,7 +440,7 @@ def delete_transactions(transaction_ids: List[str]) -> Dict:
         init_workflow()
 
     try:
-        editor = TransactionEditor(workflow.storage.transaction_repo)
+        editor = _transaction_editor()
         count = editor.delete_multiple(transaction_ids)
         return {"success": True, "deleted_count": count}
     except Exception as e:
@@ -449,7 +457,7 @@ def split_transaction(transaction_id: str, splits: List[Dict]) -> Dict:
     try:
         from decimal import Decimal
 
-        editor = TransactionEditor(workflow.storage.transaction_repo)
+        editor = _transaction_editor()
         split_list = []
         for split_data in splits:
             split_list.append(
@@ -481,7 +489,7 @@ def merge_transactions(transaction_ids: List[str], keep_first: bool = True) -> D
         init_workflow()
 
     try:
-        editor = TransactionEditor(workflow.storage.transaction_repo)
+        editor = _transaction_editor()
         merged = editor.merge_transactions(transaction_ids, keep_first)
         if merged:
             return {"success": True, "transaction": _transaction_to_dict(merged)}
@@ -500,7 +508,7 @@ def bulk_edit_transactions(
         init_workflow()
 
     try:
-        editor = TransactionEditor(workflow.storage.transaction_repo)
+        editor = _transaction_editor()
         category = None
         if category_name:
             category = Category(name=category_name)
