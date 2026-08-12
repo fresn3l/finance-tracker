@@ -442,11 +442,11 @@ The repository pattern allows easy migration to SQLCipher without changing busin
 
 ## Security Considerations
 
-- All data stored locally (no cloud sync)
-- Eel listens on `127.0.0.1` only
-- Chart.js is vendored; the UI loads no third-party script URLs
-- JSON data encrypted at rest; directory 0700 / files 0600
-- Monthly report delivery is a local macOS notification (no email unless you add it later)
+- Eel listens on `127.0.0.1` only; dashboard HTML escapes untrusted strings
+- Chart.js is vendored; CSP blocks third-party script/object loads
+- JSON data encrypted at rest; directory 0700 / files 0600; reports and exports are 0600
+- User regex rules reject nested quantifiers (ReDoS); CSV export prefixes formula cells
+- Encryption keys are never passed on a `security` process argv; new keys live in `.key` (0600)
 
 ## Testing Strategy
 

@@ -46,6 +46,7 @@ from finance_tracker.logging_config import setup_logging
 from finance_tracker.models import Budget, BudgetTemplate, Category, SplitTransaction
 from finance_tracker.recurring_detector import RecurringTransactionDetector
 from finance_tracker.search_filter import TransactionSearchFilter
+from finance_tracker.secure_store import ensure_secure_dir
 from finance_tracker.transaction_editor import TransactionEditor
 from finance_tracker.workflow import FinanceTrackerWorkflow
 
@@ -90,7 +91,7 @@ def select_file() -> Optional[str]:
 
         file_path = filedialog.askopenfilename(
             title="Select CSV File",
-            filetypes=[("CSV files", "*.csv"), ("All files", "*.*")]
+            filetypes=[("CSV files", "*.csv")],
         )
 
         root.destroy()
@@ -127,9 +128,13 @@ def import_csv_file(
         init_workflow()
 
     try:
-        csv_path = Path(file_path)
-        if not csv_path.exists():
-            raise FileNotFoundError(f"File not found: {file_path}")
+        csv_path = Path(file_path).expanduser()
+        try:
+            csv_path = csv_path.resolve()
+        except OSError:
+            return {"success": False, "error": "Invalid file path"}
+        if not csv_path.is_file() or csv_path.suffix.lower() != ".csv":
+            return {"success": False, "error": "Only local .csv files can be imported"}
 
         transactions, stats = workflow.process_csv_file(
             csv_path,
@@ -328,7 +333,7 @@ def export_transactions() -> str:
         from datetime import datetime
 
         export_dir = workflow.storage.data_dir / "exports"
-        export_dir.mkdir(exist_ok=True)
+        ensure_secure_dir(export_dir)
 
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         export_file = export_dir / f"transactions_{timestamp}.json"

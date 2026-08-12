@@ -39,6 +39,7 @@ from dataclasses import dataclass
 from typing import Dict, List, Optional, Pattern
 
 from finance_tracker.models import Category
+from finance_tracker.safe_regex import compile_user_regex
 
 
 @dataclass
@@ -181,8 +182,7 @@ class CategoryMapper:
             parent_category: Optional parent category name
             case_sensitive: Whether pattern matching is case sensitive
         """
-        flags = 0 if case_sensitive else re.IGNORECASE
-        compiled_pattern = re.compile(pattern, flags)
+        compiled_pattern = compile_user_regex(pattern, case_sensitive=case_sensitive)
         rule = CategoryRule(
             pattern=compiled_pattern,
             category_name=category_name,

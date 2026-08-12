@@ -47,9 +47,19 @@ from pathlib import Path
 from typing import Dict, List, Optional, Set
 
 from finance_tracker.models import Category, Transaction
-from finance_tracker.secure_store import SecureJSON, ensure_secure_dir
+from finance_tracker.secure_store import SecureJSON, chmod_private, ensure_secure_dir
 
 logger = logging.getLogger(__name__)
+
+_CSV_FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
+
+
+def sanitize_csv_cell(value: str) -> str:
+    """Neutralize spreadsheet formula injection in exported CSV cells."""
+    text = "" if value is None else str(value)
+    if text.startswith(_CSV_FORMULA_PREFIXES):
+        return "'" + text
+    return text
 
 
 class JSONEncoder(json.JSONEncoder):
@@ -525,6 +535,7 @@ class StorageManager:
 
         with open(output_file, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2, cls=JSONEncoder)
+        chmod_private(output_file)
 
         logger.info(f"Exported {len(transactions)} transactions to {output_file}")
 
@@ -560,17 +571,22 @@ class StorageManager:
             for transaction in transactions:
                 row = {
                     "Date": transaction.date.isoformat(),
-                    "Description": transaction.description,
+                    "Description": sanitize_csv_cell(transaction.description),
                     "Amount": str(transaction.amount),
-                    "Category": transaction.category.name if transaction.category else "",
-                    "Parent Category": transaction.category.parent if transaction.category else "",
+                    "Category": sanitize_csv_cell(
+                        transaction.category.name if transaction.category else ""
+                    ),
+                    "Parent Category": sanitize_csv_cell(
+                        transaction.category.parent if transaction.category else ""
+                    ),
                     "Type": transaction.transaction_type.value,
-                    "Account": transaction.account or "",
-                    "Reference": transaction.reference or "",
+                    "Account": sanitize_csv_cell(transaction.account or ""),
+                    "Reference": sanitize_csv_cell(transaction.reference or ""),
                     "Balance": str(transaction.balance) if transaction.balance else "",
-                    "Notes": transaction.notes or "",
+                    "Notes": sanitize_csv_cell(transaction.notes or ""),
                 }
                 writer.writerow(row)
 
+        chmod_private(output_file)
         logger.info(f"Exported {len(transactions)} transactions to {output_file}")
 

@@ -12,3 +12,10 @@ def test_chart_js_is_vendored():
     assert "jsdelivr" not in html.lower()
     assert "unpkg" not in html.lower()
     assert (WEB / "vendor" / "chart.umd.min.js").exists()
+
+
+def test_csp_blocks_third_party_scripts():
+    html = (WEB / "index.html").read_text(encoding="utf-8")
+    assert "Content-Security-Policy" in html
+    assert "object-src 'none'" in html
+    assert "script-src 'self'" in html

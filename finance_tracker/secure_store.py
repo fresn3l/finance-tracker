@@ -6,7 +6,8 @@ in the data directory at `.key` (mode 0600), or in the macOS Keychain when
 available. Plaintext files written by older versions are read and rewritten
 encrypted on the next save.
 
-The data directory is mode 0700; data files are 0600.
+The data directory is mode 0700; data files are 0600. New keys are written only
+to `.key` (never passed on a `security` process argv).
 """
 
 from __future__ import annotations
@@ -46,7 +47,8 @@ def ensure_secure_dir(path: Path) -> None:
         logger.warning("Could not set directory permissions on %s: %s", path, exc)
 
 
-def _chmod_private(path: Path) -> None:
+def chmod_private(path: Path) -> None:
+    """Restrict a file to owner read/write (0600)."""
     try:
         os.chmod(path, stat.S_IRUSR | stat.S_IWUSR)
     except OSError as exc:
@@ -83,30 +85,12 @@ def _keychain_get() -> Optional[bytes]:
     return secret.encode() if secret else None
 
 
-def _keychain_set(key: bytes) -> bool:
-    try:
-        result = subprocess.run(
-            [
-                "security",
-                "add-generic-password",
-                "-U",
-                "-a",
-                KEYCHAIN_ACCOUNT,
-                "-s",
-                KEYCHAIN_SERVICE,
-                "-w",
-                key.decode(),
-            ],
-            capture_output=True,
-            check=False,
-        )
-        return result.returncode == 0
-    except FileNotFoundError:
-        return False
-
-
 def load_or_create_key(data_dir: Path) -> bytes:
-    """Load the Fernet key from Keychain or `.key`, creating one if needed."""
+    """Load the Fernet key from Keychain or `.key`, creating one if needed.
+
+    New keys are written only to `.key` with mode 0600. The key is never passed
+    as a `security -w` argument (visible in process listings).
+    """
     Fernet = _fernet()
     keychain_key = _keychain_get()
     if keychain_key:
@@ -115,14 +99,11 @@ def load_or_create_key(data_dir: Path) -> bytes:
     ensure_secure_dir(data_dir)
     key_path = data_dir / ".key"
     if key_path.exists():
-        key = key_path.read_bytes().strip()
-        _keychain_set(key)
-        return key
+        return key_path.read_bytes().strip()
 
     key = Fernet.generate_key()
     key_path.write_bytes(key)
-    _chmod_private(key_path)
-    _keychain_set(key)
+    chmod_private(key_path)
     return key
 
 
@@ -148,7 +129,7 @@ class SecureJSON:
             path.write_bytes(payload)
         else:
             path.write_bytes(raw)
-        _chmod_private(path)
+        chmod_private(path)
 
     def read(self, path: Path) -> Any:
         """Read JSON, decrypting FTENC1 payloads. Plaintext JSON still loads."""

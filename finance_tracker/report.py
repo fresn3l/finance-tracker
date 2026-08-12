@@ -12,6 +12,7 @@ from typing import Optional
 
 from finance_tracker.analyzer import SpendingAnalyzer
 from finance_tracker.models import CashFlowSummary, MonthlySummary, MonthOverMonthComparison
+from finance_tracker.secure_store import chmod_private, ensure_secure_dir
 
 
 def _money(value: Decimal) -> str:
@@ -137,8 +138,9 @@ def render_html_report(
 
 def write_html_report(output_file: Path, html_body: str) -> Path:
     output_file = Path(output_file)
-    output_file.parent.mkdir(parents=True, exist_ok=True)
+    ensure_secure_dir(output_file.parent)
     output_file.write_text(html_body, encoding="utf-8")
+    chmod_private(output_file)
     return output_file
 
 
@@ -152,7 +154,7 @@ def write_pdf_report(
     from fpdf import FPDF
 
     output_file = Path(output_file)
-    output_file.parent.mkdir(parents=True, exist_ok=True)
+    ensure_secure_dir(output_file.parent)
 
     period = f"{summary.year}-{summary.month:02d}"
     prev = f"{mom.previous_year}-{mom.previous_month:02d}"
@@ -227,6 +229,7 @@ def write_pdf_report(
         )
 
     pdf.output(str(output_file))
+    chmod_private(output_file)
     return output_file
 
 
@@ -242,7 +245,7 @@ def generate_monthly_report(
     mom = analyzer.get_month_over_month(year, month)
     cash_flow = analyzer.get_cash_flow(year, month)
     output_dir = Path(output_dir)
-    output_dir.mkdir(parents=True, exist_ok=True)
+    ensure_secure_dir(output_dir)
     stem = f"report-{year}-{month:02d}"
     paths = {}
     if "html" in formats:

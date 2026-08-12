@@ -18,6 +18,8 @@ def notify(title: str, message: str) -> bool:
     On macOS uses `osascript` (Notification Center). Returns True if a
     notification was sent. Never sends email.
     """
+    title = (title or "Finance Tracker")[:80]
+    message = (message or "")[:200]
     if sys.platform == "darwin" and shutil.which("osascript"):
         script = (
             "display notification "

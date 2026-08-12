@@ -30,9 +30,10 @@ This list tracks what is implemented versus what is still missing. Prefer this f
 - [X] Monthly review workflow: import → uncategorized → summary/MoM → local HTML/PDF report
 - [X] Monthly report generation (self-contained HTML + PDF) with macOS Notification Center delivery (no email)
 - [X] launchd agent (`finance-tracker schedule install`) — 1st of the month at 09:00, fully offline
-- [X] Encryption at rest for JSON data (`FTENC1` Fernet; key in `.key` 0600 or macOS Keychain)
-- [X] Data directory 0700 / data files 0600; config.yaml 0600
-- [X] Vendored Chart.js (no CDN); Eel bound to `127.0.0.1` only
+- [X] Encryption at rest for JSON data (`FTENC1` Fernet; key in `.key` 0600, never on process argv)
+- [X] Data directory 0700 / data files 0600; config.yaml 0600; reports and exports 0600
+- [X] Vendored Chart.js (no CDN); Eel bound to `127.0.0.1` only; dashboard CSP + HTML escaping
+- [X] User regex ReDoS guards; CSV formula-injection prefixing; CSV-only web import
 - [X] Learn from user category corrections (merchant mappings beat default rules on later imports)
 - [X] Mac app packaging scaffolding (PyInstaller spec + py2app setup; build on macOS)
 
