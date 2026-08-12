@@ -13,6 +13,11 @@ Available Commands:
     - recategorize: Recategorize all stored transactions
     - export: Export transactions to JSON/CSV
     - stats: Show overall statistics
+    - list: List stored transactions (includes IDs)
+    - edit: Edit a stored transaction by ID
+    - delete: Delete a stored transaction by ID
+    - budget: Manage category budgets (set, list, delete, status, alerts)
+    - recurring: Detect and mark recurring transactions
 
 The CLI respects configuration settings and provides helpful error messages.
 
@@ -24,13 +29,20 @@ Example Usage:
 """
 
 import logging
+from datetime import date, datetime
+from decimal import Decimal
 from pathlib import Path
 from typing import Optional
 
 import click
 
+from finance_tracker.budget_tracker import BudgetRepository, BudgetTracker
 from finance_tracker.config import get_config
 from finance_tracker.logging_config import setup_logging
+from finance_tracker.models import Budget, Category
+from finance_tracker.recurring_detector import RecurringTransactionDetector
+from finance_tracker.search_filter import TransactionSearchFilter
+from finance_tracker.transaction_editor import TransactionEditor
 from finance_tracker.workflow import FinanceTrackerWorkflow
 
 logger = logging.getLogger(__name__)
@@ -221,12 +233,15 @@ def uncategorized(ctx: click.Context):
         return
 
     click.echo(f"\nFound {len(uncategorized_txns)} uncategorized transactions:")
-    click.echo("=" * 80)
-    click.echo(f"{'Date':<12} {'Description':<40} {'Amount':>12}")
-    click.echo("-" * 80)
+    click.echo("=" * 100)
+    click.echo(f"{'ID':<36} {'Date':<12} {'Description':<40} {'Amount':>12}")
+    click.echo("-" * 100)
 
     for txn in uncategorized_txns[:50]:  # Show first 50
-        click.echo(f"{txn.date} {txn.description:<40} ${txn.absolute_amount:>10,.2f}")
+        click.echo(
+            f"{txn.id or 'N/A':<36} {txn.date} {_truncate(txn.description, 40):<40} "
+            f"${txn.absolute_amount:>10,.2f}"
+        )
 
     if len(uncategorized_txns) > 50:
         click.echo(f"\n... and {len(uncategorized_txns) - 50} more")
@@ -290,6 +305,355 @@ def stats(ctx: click.Context):
     if total_income > 0:
         savings_rate = (net_amount / total_income) * 100
         click.echo(f"Savings Rate:  {savings_rate:.1f}%")
+
+
+def _truncate(text: str, width: int) -> str:
+    """Truncate text to width, adding ellipsis when needed."""
+    if len(text) <= width:
+        return text
+    return text[: width - 3] + "..."
+
+
+def _print_transaction_table(transactions, limit: Optional[int] = None) -> None:
+    """Print a table of transactions including IDs for edit/delete."""
+    rows = transactions[:limit] if limit is not None else transactions
+    click.echo(f"{'ID':<36} {'Date':<12} {'Description':<32} {'Category':<18} {'Amount':>12}")
+    click.echo("-" * 114)
+    for txn in rows:
+        category = txn.category.name if txn.category else "Uncategorized"
+        click.echo(
+            f"{txn.id or 'N/A':<36} "
+            f"{txn.date.isoformat():<12} "
+            f"{_truncate(txn.description, 32):<32} "
+            f"{_truncate(category, 18):<18} "
+            f"${txn.amount:>10,.2f}"
+        )
+
+
+@cli.command("list")
+@click.option("--limit", default=50, help="Maximum number of transactions to show")
+@click.option("--query", help="Search description and notes")
+@click.option("--category", help="Filter by category name")
+@click.option("--account", help="Filter by account")
+@click.option("--type", "transaction_type", type=click.Choice(["debit", "credit", "transfer"]))
+@click.option("--recurring", is_flag=True, help="Show only recurring transactions")
+@click.pass_context
+def list_transactions(
+    ctx: click.Context,
+    limit: int,
+    query: Optional[str],
+    category: Optional[str],
+    account: Optional[str],
+    transaction_type: Optional[str],
+    recurring: bool,
+):
+    """List stored transactions (includes IDs for edit/delete)."""
+    data_dir = ctx.obj["data_dir"]
+    workflow = FinanceTrackerWorkflow(data_dir=data_dir)
+    transactions = workflow.storage.transaction_repo.load_all()
+    transactions.sort(key=lambda t: t.date, reverse=True)
+
+    searcher = TransactionSearchFilter(transactions)
+    results = searcher.search(
+        query=query,
+        category=category,
+        account=account,
+        transaction_type=transaction_type,
+        is_recurring=True if recurring else None,
+    )
+
+    if not results:
+        click.echo("No transactions found.")
+        return
+
+    click.echo(f"\nShowing {min(limit, len(results))} of {len(results)} transactions")
+    click.echo("=" * 114)
+    _print_transaction_table(results, limit=limit)
+
+
+@cli.command()
+@click.argument("transaction_id")
+@click.option("--description", help="New description")
+@click.option("--amount", type=str, help="New amount (negative for expenses)")
+@click.option("--date", "txn_date", help="New date (YYYY-MM-DD)")
+@click.option("--category", help="New category name")
+@click.option("--parent", help="Parent category name")
+@click.option("--notes", help="New notes")
+@click.pass_context
+def edit(
+    ctx: click.Context,
+    transaction_id: str,
+    description: Optional[str],
+    amount: Optional[str],
+    txn_date: Optional[str],
+    category: Optional[str],
+    parent: Optional[str],
+    notes: Optional[str],
+):
+    """Edit a stored transaction by ID."""
+    if not any([description, amount, txn_date, category, notes]):
+        click.echo("Error: provide at least one field to change.", err=True)
+        raise SystemExit(1)
+
+    data_dir = ctx.obj["data_dir"]
+    workflow = FinanceTrackerWorkflow(data_dir=data_dir)
+    editor = TransactionEditor(workflow.storage.transaction_repo)
+
+    parsed_amount = Decimal(amount) if amount is not None else None
+    parsed_date = datetime.fromisoformat(txn_date).date() if txn_date else None
+    parsed_category = None
+    if category:
+        parsed_category = Category(name=category, parent=parent)
+
+    updated = editor.edit_transaction(
+        transaction_id=transaction_id,
+        description=description,
+        amount=parsed_amount,
+        date=parsed_date,
+        category=parsed_category,
+        notes=notes,
+    )
+    if not updated:
+        click.echo(f"Error: transaction {transaction_id} not found.", err=True)
+        raise SystemExit(1)
+
+    click.echo(f"✓ Updated transaction {updated.id}")
+    click.echo(f"  {updated.date}  {_truncate(updated.description, 40)}  ${updated.amount:,.2f}")
+    if updated.category:
+        click.echo(f"  Category: {updated.category.name}")
+
+
+@cli.command("delete")
+@click.argument("transaction_id")
+@click.option("--yes", "-y", is_flag=True, help="Skip confirmation")
+@click.pass_context
+def delete_transaction(ctx: click.Context, transaction_id: str, yes: bool):
+    """Delete a stored transaction by ID."""
+    data_dir = ctx.obj["data_dir"]
+    workflow = FinanceTrackerWorkflow(data_dir=data_dir)
+    editor = TransactionEditor(workflow.storage.transaction_repo)
+
+    existing = workflow.storage.transaction_repo.get_by_id(transaction_id)
+    if not existing:
+        click.echo(f"Error: transaction {transaction_id} not found.", err=True)
+        raise SystemExit(1)
+
+    if not yes and not click.confirm(f"Delete '{existing.description}' ({existing.date})?"):
+        click.echo("Cancelled.")
+        return
+
+    if editor.delete_transaction(transaction_id):
+        click.echo(f"✓ Deleted transaction {transaction_id}")
+    else:
+        click.echo(f"Error: failed to delete {transaction_id}.", err=True)
+        raise SystemExit(1)
+
+
+@cli.group()
+def budget():
+    """Manage category budgets."""
+
+
+@budget.command("set")
+@click.argument("category_name")
+@click.option("--year", type=int, help="Budget year (defaults to current year)")
+@click.option("--month", type=int, help="Budget month 1-12 (defaults to current month)")
+@click.option("--amount", required=True, type=str, help="Budget amount")
+@click.option(
+    "--alert-threshold",
+    default="0.8",
+    show_default=True,
+    help="Alert when spending reaches this fraction of the budget (0-1)",
+)
+@click.option("--notes", help="Optional budget notes")
+@click.pass_context
+def budget_set(
+    ctx: click.Context,
+    category_name: str,
+    year: Optional[int],
+    month: Optional[int],
+    amount: str,
+    alert_threshold: str,
+    notes: Optional[str],
+):
+    """Set a monthly budget for a category."""
+    year = year or date.today().year
+    month = month or date.today().month
+    data_dir = ctx.obj["data_dir"]
+    repo = BudgetRepository(data_dir)
+    repo.save_budget(
+        Budget(
+            category_name=category_name,
+            year=year,
+            month=month,
+            amount=Decimal(amount),
+            alert_threshold=Decimal(alert_threshold),
+            notes=notes,
+        )
+    )
+    click.echo(f"✓ Set {category_name} budget for {year}-{month:02d} to ${Decimal(amount):,.2f}")
+
+
+@budget.command("list")
+@click.option("--year", type=int, help="Filter by year (defaults to current year)")
+@click.option("--month", type=int, help="Filter by month (defaults to current month)")
+@click.pass_context
+def budget_list(ctx: click.Context, year: Optional[int], month: Optional[int]):
+    """List budgets and spending status for a month."""
+    year = year or date.today().year
+    month = month or date.today().month
+    data_dir = ctx.obj["data_dir"]
+    workflow = FinanceTrackerWorkflow(data_dir=data_dir)
+    transactions = workflow.storage.transaction_repo.load_all()
+    tracker = BudgetTracker(transactions, BudgetRepository(data_dir))
+    statuses = tracker.get_all_budget_statuses(year, month)
+
+    if not statuses:
+        click.echo(f"No budgets set for {year}-{month:02d}.")
+        return
+
+    click.echo(f"\nBudgets for {year}-{month:02d}")
+    click.echo("=" * 80)
+    click.echo(f"{'Category':<24} {'Budget':>12} {'Spent':>12} {'Remaining':>12} {'%':>8}")
+    click.echo("-" * 80)
+    for status in statuses:
+        remaining = Decimal(status["remaining"])
+        click.echo(
+            f"{status['category_name']:<24} "
+            f"${Decimal(status['budget']):>10,.2f} "
+            f"${Decimal(status['spent']):>10,.2f} "
+            f"${remaining:>10,.2f} "
+            f"{status['percentage_spent']:>7.1f}%"
+        )
+
+
+@budget.command("status")
+@click.argument("category_name")
+@click.option("--year", type=int, help="Budget year (defaults to current year)")
+@click.option("--month", type=int, help="Budget month (defaults to current month)")
+@click.pass_context
+def budget_status(
+    ctx: click.Context, category_name: str, year: Optional[int], month: Optional[int]
+):
+    """Show budget status for a single category."""
+    year = year or date.today().year
+    month = month or date.today().month
+    data_dir = ctx.obj["data_dir"]
+    workflow = FinanceTrackerWorkflow(data_dir=data_dir)
+    transactions = workflow.storage.transaction_repo.load_all()
+    tracker = BudgetTracker(transactions, BudgetRepository(data_dir))
+    status = tracker.get_budget_status(category_name, year, month)
+
+    if not status.get("has_budget"):
+        click.echo(f"No budget set for {category_name} in {year}-{month:02d}.")
+        raise SystemExit(1)
+
+    click.echo(f"\n{category_name} — {year}-{month:02d}")
+    click.echo("=" * 40)
+    click.echo(f"Budget:     ${Decimal(status['budget']):,.2f}")
+    click.echo(f"Spent:      ${Decimal(status['spent']):,.2f}")
+    click.echo(f"Remaining:  ${Decimal(status['remaining']):,.2f}")
+    click.echo(f"Used:       {status['percentage_spent']:.1f}%")
+    if status.get("over_budget"):
+        click.echo("Status:     OVER BUDGET")
+    elif status.get("should_alert"):
+        click.echo("Status:     Alert threshold reached")
+    else:
+        click.echo("Status:     On track")
+
+
+@budget.command("alerts")
+@click.option("--year", type=int, help="Year (defaults to current year)")
+@click.option("--month", type=int, help="Month (defaults to current month)")
+@click.pass_context
+def budget_alerts(ctx: click.Context, year: Optional[int], month: Optional[int]):
+    """Show budget alerts for a month."""
+    year = year or date.today().year
+    month = month or date.today().month
+    data_dir = ctx.obj["data_dir"]
+    workflow = FinanceTrackerWorkflow(data_dir=data_dir)
+    transactions = workflow.storage.transaction_repo.load_all()
+    tracker = BudgetTracker(transactions, BudgetRepository(data_dir))
+    alerts = tracker.check_alerts(year, month)
+
+    if not alerts:
+        click.echo(f"No budget alerts for {year}-{month:02d}.")
+        return
+
+    click.echo(f"\nBudget alerts for {year}-{month:02d}")
+    click.echo("=" * 60)
+    for alert in alerts:
+        click.echo(f"  {alert['category']}: {alert['message']}")
+
+
+@budget.command("delete")
+@click.argument("category_name")
+@click.option("--year", type=int, required=True, help="Budget year")
+@click.option("--month", type=int, required=True, help="Budget month")
+@click.pass_context
+def budget_delete(ctx: click.Context, category_name: str, year: int, month: int):
+    """Delete a category budget for a month."""
+    data_dir = ctx.obj["data_dir"]
+    repo = BudgetRepository(data_dir)
+    if repo.delete_budget(category_name, year, month):
+        click.echo(f"✓ Deleted {category_name} budget for {year}-{month:02d}")
+    else:
+        click.echo(f"Error: no budget found for {category_name} in {year}-{month:02d}.", err=True)
+        raise SystemExit(1)
+
+
+@cli.group()
+def recurring():
+    """Detect and mark recurring transactions."""
+
+
+@recurring.command("detect")
+@click.option("--min-occurrences", default=3, show_default=True, help="Minimum repeats to flag")
+@click.pass_context
+def recurring_detect(ctx: click.Context, min_occurrences: int):
+    """Detect recurring transaction patterns."""
+    data_dir = ctx.obj["data_dir"]
+    workflow = FinanceTrackerWorkflow(data_dir=data_dir)
+    transactions = workflow.storage.transaction_repo.load_all()
+    detector = RecurringTransactionDetector(transactions)
+    found = detector.detect_recurring(min_occurrences=min_occurrences)
+
+    if not found:
+        click.echo("No recurring patterns detected.")
+        return
+
+    click.echo(f"\nDetected {len(found)} recurring pattern(s)")
+    click.echo("=" * 90)
+    click.echo(f"{'Description':<32} {'Freq':<10} {'Amount':>12} {'Count':>8} {'Conf':>8}")
+    click.echo("-" * 90)
+    for item in found:
+        click.echo(
+            f"{_truncate(item.description_pattern, 32):<32} "
+            f"{item.frequency:<10} "
+            f"${item.amount:>10,.2f} "
+            f"{item.transaction_count:>8} "
+            f"{item.confidence:>7.0%}"
+        )
+
+
+@recurring.command("mark")
+@click.option("--min-occurrences", default=3, show_default=True, help="Minimum repeats to flag")
+@click.pass_context
+def recurring_mark(ctx: click.Context, min_occurrences: int):
+    """Mark matching stored transactions as recurring."""
+    data_dir = ctx.obj["data_dir"]
+    workflow = FinanceTrackerWorkflow(data_dir=data_dir)
+    transactions = workflow.storage.transaction_repo.load_all()
+    detector = RecurringTransactionDetector(transactions)
+    found = detector.detect_recurring(min_occurrences=min_occurrences)
+    if not found:
+        click.echo("No recurring patterns detected.")
+        return
+
+    updated = detector.mark_recurring(found)
+    workflow.storage.transaction_repo._save_all(updated)
+    marked = sum(1 for t in updated if t.is_recurring)
+    click.echo(f"✓ Marked {marked} transaction(s) as recurring ({len(found)} pattern(s))")
 
 
 def main():

@@ -167,6 +167,8 @@ def test_transaction_zero_amount_raises_error():
 - Don't test implementation details
 - Use `pytest-cov` to check coverage
 
+Pull requests run GitHub Actions CI (`.github/workflows/ci.yml`): `ruff check` and `pytest` on Python 3.9–3.12. Keep those green before merging.
+
 ## Documentation
 
 ### Code Documentation

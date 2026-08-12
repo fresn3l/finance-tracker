@@ -8,10 +8,10 @@ import json
 import logging
 import re
 from pathlib import Path
-from typing import Dict, List, Optional, Pattern
+from typing import Dict, List, Optional
 
 from finance_tracker.category_mapper import CategoryMapper, CategoryRule
-from finance_tracker.models import Category, Transaction
+from finance_tracker.models import Transaction
 
 logger = logging.getLogger(__name__)
 

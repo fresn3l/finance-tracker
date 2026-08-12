@@ -2,10 +2,6 @@
 
 from datetime import date
 from decimal import Decimal
-from pathlib import Path
-from tempfile import TemporaryDirectory
-
-import pytest
 
 from finance_tracker.models import Category, Transaction, TransactionType
 from finance_tracker.storage import (
@@ -91,6 +87,33 @@ class TestTransactionRepository:
 
         loaded = repo.load_all()
         assert len(loaded) == 1  # Should only have one
+
+    def test_load_all_assigns_missing_ids(self, tmp_path):
+        """Legacy records without IDs should get one on load so edit/delete work."""
+        import json
+
+        repo = TransactionRepository(tmp_path)
+        repo.transactions_file.write_text(
+            json.dumps(
+                {
+                    "transactions": [
+                        {
+                            "date": "2024-01-15",
+                            "amount": "-50.00",
+                            "description": "Legacy Transaction",
+                            "transaction_type": "debit",
+                        }
+                    ]
+                }
+            )
+        )
+
+        loaded = repo.load_all()
+        assert len(loaded) == 1
+        assert loaded[0].id is not None
+
+        reloaded = repo.load_all()
+        assert reloaded[0].id == loaded[0].id
 
 
 class TestCategoryRepository:

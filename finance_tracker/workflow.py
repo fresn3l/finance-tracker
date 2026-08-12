@@ -42,8 +42,8 @@ from pathlib import Path
 from typing import List, Optional
 
 from finance_tracker.analyzer import SpendingAnalyzer
-from finance_tracker.categorizer import TransactionCategorizer, categorize_transactions
-from finance_tracker.csv_parser import CSVParser, parse_csv
+from finance_tracker.categorizer import TransactionCategorizer
+from finance_tracker.csv_parser import CSVParser
 from finance_tracker.models import Transaction
 from finance_tracker.storage import StorageManager
 

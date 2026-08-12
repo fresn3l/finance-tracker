@@ -134,13 +134,21 @@ class TransactionRepository:
                 data = json.load(f)
 
             transactions = []
+            missing_ids = False
             for txn_data in data.get("transactions", []):
                 try:
                     transaction = self._deserialize_transaction(txn_data)
+                    if not transaction.id:
+                        transaction = transaction.model_copy(update={"id": str(uuid.uuid4())})
+                        missing_ids = True
                     transactions.append(transaction)
                 except Exception as e:
                     logger.warning(f"Error deserializing transaction: {e}")
                     continue
+
+            if missing_ids:
+                self._save_all(transactions)
+                logger.info("Assigned missing transaction IDs")
 
             logger.info(f"Loaded {len(transactions)} transactions")
             return transactions

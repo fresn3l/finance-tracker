@@ -69,6 +69,10 @@ transaction = Transaction(
 - `reference` (str, optional): Transaction reference
 - `balance` (Decimal, optional): Account balance
 - `notes` (str, optional): User notes
+- `id` (str, optional): Unique transaction identifier (assigned on save; backfilled on load if missing)
+- `is_recurring` (bool): Whether this matches a detected recurring pattern
+- `recurring_id` (str, optional): ID of the recurring group
+- `parent_transaction_id` (str, optional): Parent ID when this row is a split
 
 **Properties**:
 - `is_expense`: Returns True if transaction is an expense
@@ -308,8 +312,15 @@ The CLI is accessed via the `finance-tracker` command:
 
 ```bash
 finance-tracker import-csv file.csv
+finance-tracker list
 finance-tracker summary --year 2024 --month 1
 finance-tracker categories
+finance-tracker edit <transaction-id> --category Groceries
+finance-tracker delete <transaction-id> --yes
+finance-tracker budget set Groceries --year 2024 --month 1 --amount 500
+finance-tracker budget list --year 2024 --month 1
+finance-tracker recurring detect
+finance-tracker recurring mark
 finance-tracker export output.json --format json
 ```
 

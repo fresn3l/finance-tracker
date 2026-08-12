@@ -34,7 +34,6 @@ Example:
 """
 
 from collections import defaultdict
-from datetime import date
 from decimal import Decimal
 from typing import Dict, List, Optional
 

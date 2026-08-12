@@ -7,7 +7,7 @@ This module provides powerful search and filtering capabilities for transactions
 import logging
 from datetime import date
 from decimal import Decimal
-from typing import Callable, Dict, List, Optional
+from typing import Dict, List, Optional
 
 from finance_tracker.models import Transaction
 
@@ -142,7 +142,7 @@ class TransactionSearchFilter:
         for transaction in self.transactions:
             if transaction.category:
                 categories.add(transaction.category.name)
-        return sorted(list(categories))
+        return sorted(categories)
 
     def get_accounts(self) -> List[str]:
         """
@@ -155,5 +155,5 @@ class TransactionSearchFilter:
         for transaction in self.transactions:
             if transaction.account:
                 accounts.add(transaction.account)
-        return sorted(list(accounts))
+        return sorted(accounts)
 

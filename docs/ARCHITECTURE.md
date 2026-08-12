@@ -63,9 +63,12 @@ The Finance Tracker is a Python application that processes bank statement CSV fi
 **Key Classes**:
 - `TransactionType`: Enum for transaction types (DEBIT, CREDIT, TRANSFER)
 - `Category`: Represents a spending category with hierarchical support
-- `Transaction`: Core transaction model with validation
+- `Transaction`: Core transaction model with validation (includes `id`, notes, recurring/split fields)
 - `MonthlySummary`: Aggregated monthly statistics
 - `SpendingPattern`: Category-level spending analysis
+- `Budget` / `BudgetTemplate`: Per-category monthly budgets
+- `RecurringTransaction`: Detected subscription/bill pattern
+- `SplitTransaction`: One transaction split across categories
 
 **Design Decisions**:
 - Uses Pydantic v2 for validation and serialization
@@ -178,6 +181,11 @@ The Finance Tracker is a Python application that processes bank statement CSV fi
 - `recategorize`: Recategorize all transactions
 - `export`: Export transactions to JSON/CSV
 - `stats`: Show overall statistics
+- `list`: List stored transactions (includes IDs)
+- `edit`: Edit a stored transaction by ID
+- `delete`: Delete a stored transaction by ID
+- `budget`: Manage category budgets (`set`, `list`, `status`, `alerts`, `delete`)
+- `recurring`: Detect and mark recurring transactions (`detect`, `mark`)
 
 ### Web App (`web_app.py`)
 
@@ -186,10 +194,57 @@ The Finance Tracker is a Python application that processes bank statement CSV fi
 **Features**:
 - Desktop app window (using Microsoft Edge on macOS)
 - Dashboard with charts and statistics
-- Transaction list with search/filter
+- Transaction list with search/filter, edit, delete, split, and bulk actions
 - Category analysis
+- Budget management and alerts
+- Recurring transaction detection
+- Category rules management
 - CSV import with drag-and-drop
 - Real-time data updates
+
+`get_transactions` returns the same dictionary shape as other transaction endpoints, including `id`, `notes`, and `is_recurring`, so the table's edit/delete actions work.
+
+### Transaction Editor (`transaction_editor.py`)
+
+**Purpose**: Mutate stored transactions.
+
+**Features**:
+- Edit description, amount, date, category, and notes
+- Delete one or many transactions
+- Split a transaction across categories
+- Merge transactions
+- Bulk category/notes updates
+
+### Search & Filter (`search_filter.py`)
+
+**Purpose**: Query stored transactions.
+
+**Features**:
+- Text search over description and notes
+- Filters for category, account, date range, amount range, type, and recurring flag
+
+### Budget Tracker (`budget_tracker.py`)
+
+**Purpose**: Set monthly category budgets and compare against spending.
+
+**Features**:
+- Persist budgets and templates as JSON
+- Spending vs. budget status
+- Alert when a threshold is reached or the budget is exceeded
+
+### Recurring Detector (`recurring_detector.py`)
+
+**Purpose**: Find subscription/bill patterns and mark matching transactions.
+
+**Features**:
+- Group by normalized description
+- Classify weekly / monthly / yearly frequency
+- Confidence score and next-expected date
+- `mark_recurring` uses `model_copy(update=...)` so existing fields are preserved
+
+### Category Rules Manager (`category_rules_manager.py`)
+
+**Purpose**: Add, test, import, and export custom categorization rules.
 
 ### Configuration (`config.py`)
 
@@ -293,18 +348,23 @@ SpendingAnalyzer
 
 ```
 finance_tracker/
-├── __init__.py          # Package initialization and exports
-├── models.py            # Data models (Transaction, Category, etc.)
-├── csv_parser.py        # CSV parsing and format detection
-├── category_mapper.py   # Category mapping rules
-├── categorizer.py       # Transaction categorization
-├── analyzer.py          # Spending analysis
-├── storage.py           # Data persistence
-├── workflow.py          # End-to-end workflows
-├── config.py            # Configuration management
-├── logging_config.py    # Logging setup
-├── cli.py               # Command-line interface
-└── web_app.py           # Web application
+├── __init__.py                 # Package initialization and exports
+├── models.py                   # Data models (Transaction, Category, Budget, etc.)
+├── csv_parser.py               # CSV parsing and format detection
+├── category_mapper.py          # Category mapping rules
+├── categorizer.py              # Transaction categorization
+├── analyzer.py                 # Spending analysis
+├── storage.py                  # Data persistence
+├── workflow.py                 # End-to-end workflows
+├── config.py                   # Configuration management
+├── logging_config.py           # Logging setup
+├── cli.py                      # Command-line interface
+├── web_app.py                  # Web application
+├── transaction_editor.py       # Edit / delete / split / merge
+├── search_filter.py            # Advanced search
+├── budget_tracker.py           # Budgets and alerts
+├── recurring_detector.py       # Recurring pattern detection
+└── category_rules_manager.py   # Custom category rules
 ```
 
 ## Error Handling
@@ -324,6 +384,8 @@ All exceptions include descriptive error messages and context.
 - Files stored in `~/.finance-tracker/`
 - `transactions.json`: All transactions
 - `categories.json`: Custom categories
+- `budgets.json` / `budget_templates.json`: Category budgets
+- `custom_category_rules.json`: User-defined categorization rules
 - `config.yaml`: Application configuration
 
 ### Future Migration Path
@@ -345,10 +407,11 @@ The repository pattern allows easy migration to SQLite or PostgreSQL without cha
 
 ## Testing Strategy
 
-- Unit tests for each module
+- Unit tests for each module, including editor, budgets, recurring detection, CLI, and web transaction payloads
 - Integration tests for workflows
 - Sample data for testing different CSV formats
 - Test coverage tracking with pytest-cov
+- GitHub Actions CI (lint + pytest on Python 3.9–3.12)
 
 ## Extension Points
 

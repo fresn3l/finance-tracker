@@ -52,6 +52,9 @@ pip install -e ".[dev]"
 # Import a CSV file
 finance-tracker import-csv sample_data/bank_statement_jan_2024.csv
 
+# List transactions (IDs are required for edit/delete)
+finance-tracker list
+
 # View monthly summary
 finance-tracker summary --year 2024 --month 1
 
@@ -60,6 +63,19 @@ finance-tracker categories --limit 10
 
 # List uncategorized transactions
 finance-tracker uncategorized
+
+# Edit or delete a transaction by ID
+finance-tracker edit <transaction-id> --category Groceries --notes "fixed"
+finance-tracker delete <transaction-id> --yes
+
+# Budgets
+finance-tracker budget set Groceries --year 2024 --month 1 --amount 500
+finance-tracker budget list --year 2024 --month 1
+finance-tracker budget alerts --year 2024 --month 1
+
+# Recurring transactions
+finance-tracker recurring detect
+finance-tracker recurring mark
 
 # Export transactions
 finance-tracker export transactions.json --format json
@@ -83,8 +99,11 @@ python -m finance_tracker.web_app
 
 The web app provides:
 - 📊 **Dashboard**: Statistics, charts, and monthly summaries
-- 📝 **Transactions**: Searchable, filterable transaction list
+- 📝 **Transactions**: Searchable, filterable list with edit / delete / split / bulk actions
 - 🏷️ **Categories**: Category breakdown and analysis
+- 💰 **Budgets**: Per-category monthly budgets and alerts
+- 🔄 **Recurring**: Detect subscriptions and bills
+- ⚙️ **Rules**: Add and test custom categorization rules
 - 📤 **Import**: Drag-and-drop CSV file import
 
 ## Usage Guide
@@ -196,7 +215,12 @@ finance-tracker/
 │   ├── storage.py        # Data persistence
 │   ├── workflow.py       # End-to-end workflows
 │   ├── cli.py            # Command-line interface
-│   └── web_app.py        # Web application
+│   ├── web_app.py        # Web application
+│   ├── transaction_editor.py
+│   ├── search_filter.py
+│   ├── budget_tracker.py
+│   ├── recurring_detector.py
+│   └── category_rules_manager.py
 ├── tests/                # Test suite
 ├── sample_data/          # Sample CSV files
 ├── docs/                 # Documentation
@@ -207,6 +231,8 @@ finance-tracker/
 │   ├── index.html
 │   ├── style.css
 │   └── main.js
+├── .github/workflows/    # CI
+├── LICENSE               # MIT
 └── README.md
 ```
 
@@ -280,6 +306,8 @@ The application automatically detects and supports:
 All data is stored locally in `~/.finance-tracker/`:
 - `transactions.json`: All transactions
 - `categories.json`: Custom categories
+- `budgets.json`: Category budgets
+- `custom_category_rules.json`: User-defined categorization rules
 - `config.yaml`: Application configuration
 - `exports/`: Exported data files
 
@@ -311,7 +339,7 @@ We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guid
 
 ## License
 
-MIT License - see LICENSE file for details
+MIT License - see [LICENSE](LICENSE) for details
 
 ## Support
 

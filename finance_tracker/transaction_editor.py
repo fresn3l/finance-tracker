@@ -6,8 +6,9 @@ This module provides functionality to edit, delete, split, and merge transaction
 
 import logging
 import uuid
+from datetime import date
 from decimal import Decimal
-from typing import Dict, List, Optional
+from typing import List, Optional
 
 from finance_tracker.models import Category, SplitTransaction, Transaction
 
@@ -31,7 +32,7 @@ class TransactionEditor:
         transaction_id: str,
         description: Optional[str] = None,
         amount: Optional[Decimal] = None,
-        date: Optional = None,
+        date: Optional[date] = None,
         category: Optional[Category] = None,
         notes: Optional[str] = None,
     ) -> Optional[Transaction]:
@@ -176,13 +177,12 @@ class TransactionEditor:
 
         if keep_first:
             # Use first transaction as base
-            merged = transactions[0]
-            # Sum amounts
             total_amount = sum(t.amount for t in transactions)
-            merged = Transaction(
-                **merged.model_dump(),
-                amount=total_amount,
-                description=f"{merged.description} (merged)",
+            merged = transactions[0].model_copy(
+                update={
+                    "amount": total_amount,
+                    "description": f"{transactions[0].description} (merged)",
+                }
             )
         else:
             # Combine all details

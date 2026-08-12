@@ -33,7 +33,6 @@ Or from command line:
 
 import logging
 import subprocess
-import sys
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -76,15 +75,15 @@ def select_file() -> Optional[str]:
     try:
         import tkinter as tk
         from tkinter import filedialog
-        
+
         root = tk.Tk()
         root.withdraw()  # Hide the main window
-        
+
         file_path = filedialog.askopenfilename(
             title="Select CSV File",
             filetypes=[("CSV files", "*.csv"), ("All files", "*.*")]
         )
-        
+
         root.destroy()
         return file_path if file_path else None
     except Exception as e:
@@ -160,38 +159,16 @@ def get_transactions(page: int = 1, per_page: int = 50) -> List[Dict]:
 
     try:
         transactions = workflow.storage.transaction_repo.load_all()
-        
+
         # Sort by date (newest first)
         transactions.sort(key=lambda t: t.date, reverse=True)
-        
+
         # Paginate
         start = (page - 1) * per_page
         end = start + per_page
         page_transactions = transactions[start:end]
-        
-        # Convert to dictionaries
-        result = []
-        for txn in page_transactions:
-            txn_dict = {
-                "date": txn.date.isoformat(),
-                "description": txn.description,
-                "amount": str(txn.amount),
-                "transaction_type": txn.transaction_type.value,
-                "category": None,
-            }
-            if txn.category:
-                txn_dict["category"] = {
-                    "name": txn.category.name,
-                    "parent": txn.category.parent,
-                }
-            if txn.account:
-                txn_dict["account"] = txn.account
-            if txn.balance is not None:
-                txn_dict["balance"] = str(txn.balance)
-            
-            result.append(txn_dict)
-        
-        return result
+
+        return [_transaction_to_dict(txn) for txn in page_transactions]
     except Exception as e:
         logger.error(f"Error getting transactions: {e}", exc_info=True)
         return []
@@ -213,11 +190,11 @@ def get_overall_stats() -> Dict:
         total_income = analyzer.get_total_income()
         total_expenses = analyzer.get_total_expenses()
         net_amount = analyzer.get_net_amount()
-        
+
         savings_rate = None
         if total_income > 0:
             savings_rate = float((net_amount / total_income) * 100)
-        
+
         return {
             "total_income": str(total_income),
             "total_expenses": str(total_expenses),
@@ -248,7 +225,7 @@ def get_monthly_summaries() -> List[Dict]:
     try:
         analyzer = workflow.analyze_spending()
         summaries = analyzer.get_all_monthly_summaries()
-        
+
         result = []
         for summary in summaries:
             result.append({
@@ -263,7 +240,7 @@ def get_monthly_summaries() -> List[Dict]:
                     k: str(v) for k, v in summary.category_breakdown.items()
                 },
             })
-        
+
         return result
     except Exception as e:
         logger.error(f"Error getting monthly summaries: {e}", exc_info=True)
@@ -304,7 +281,7 @@ def get_spending_patterns() -> List[Dict]:
     try:
         analyzer = workflow.analyze_spending()
         patterns = analyzer.get_spending_patterns()
-        
+
         result = []
         for pattern in patterns:
             result.append({
@@ -317,10 +294,10 @@ def get_spending_patterns() -> List[Dict]:
                 "percentage_of_total": pattern.percentage_of_total,
                 "trend": pattern.trend,
             })
-        
+
         # Sort by total amount descending
         result.sort(key=lambda p: float(p["total_amount"]), reverse=True)
-        
+
         return result
     except Exception as e:
         logger.error(f"Error getting spending patterns: {e}", exc_info=True)
@@ -340,15 +317,15 @@ def export_transactions() -> str:
 
     try:
         from datetime import datetime
-        
+
         export_dir = workflow.storage.data_dir / "exports"
         export_dir.mkdir(exist_ok=True)
-        
+
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         export_file = export_dir / f"transactions_{timestamp}.json"
-        
+
         workflow.storage.export_transactions_json(export_file)
-        
+
         return str(export_file)
     except Exception as e:
         logger.error(f"Error exporting transactions: {e}", exc_info=True)
@@ -914,34 +891,34 @@ def start_web_app(port: int = 8080, size: tuple = (1200, 800)) -> None:
     """
     # Setup logging
     setup_logging(level="INFO")
-    
+
     # Initialize workflow
     init_workflow()
-    
+
     # Get web directory
     web_dir = Path(__file__).parent.parent / "web"
-    
+
     logger.info(f"Starting web app on port {port}")
     logger.info(f"Web directory: {web_dir}")
-    
+
     # Start Eel
     eel.init(str(web_dir))
-    
+
     # Configure for Microsoft Edge on macOS
     edge_path = "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge"
-    
+
     # Start the app
     try:
         if Path(edge_path).exists():
             # For macOS, we need to manually launch Edge since Eel's edge mode is Windows-only
             logger.info(f"Using Microsoft Edge at {edge_path}")
-            
+
             # Check if port is available, if not try next port
             import socket
             def is_port_available(port_num):
                 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
                     return s.connect_ex(('localhost', port_num)) != 0
-            
+
             actual_port = port
             if not is_port_available(port):
                 # Try next few ports
@@ -953,11 +930,11 @@ def start_web_app(port: int = 8080, size: tuple = (1200, 800)) -> None:
                 else:
                     logger.error(f"Could not find available port starting from {port}")
                     return
-            
+
             # Launch Edge after a short delay to allow server to start
             import threading
             import time
-            
+
             def launch_edge_delayed():
                 time.sleep(1.5)  # Wait for server to start
                 url = f"http://localhost:{actual_port}/index.html"
@@ -968,11 +945,11 @@ def start_web_app(port: int = 8080, size: tuple = (1200, 800)) -> None:
                     stderr=subprocess.DEVNULL,
                     stdin=subprocess.PIPE
                 )
-            
+
             # Launch Edge in background thread
             edge_thread = threading.Thread(target=launch_edge_delayed, daemon=True)
             edge_thread.start()
-            
+
             # Start Eel server (this blocks)
             eel.start("index.html", size=size, port=actual_port, mode=None, host="localhost")
         else:

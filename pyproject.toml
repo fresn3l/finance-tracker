@@ -56,6 +56,8 @@ include = '\.pyi?$'
 [tool.ruff]
 line-length = 100
 target-version = "py39"
+
+[tool.ruff.lint]
 select = [
     "E",  # pycodestyle errors
     "W",  # pycodestyle warnings
@@ -66,9 +68,13 @@ select = [
 ]
 ignore = [
     "E501",  # line too long (handled by black)
+    "B017",  # pytest.raises(Exception) in existing model tests
+    "B904",  # raise-from in existing CSV parser errors
+    "W291",  # trailing space on doctest `>>> ` blank lines
+    "W293",  # whitespace-only lines in module docstrings
 ]
 
-[tool.ruff.per-file-ignores]
+[tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401"]
 
 [tool.pytest.ini_options]

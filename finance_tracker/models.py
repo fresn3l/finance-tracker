@@ -73,11 +73,9 @@ class Transaction(BaseModel):
     id: Optional[str] = Field(None, description="Unique transaction identifier")
     is_recurring: bool = Field(default=False, description="Whether this is a recurring transaction")
     recurring_id: Optional[str] = Field(None, description="ID of recurring transaction group")
-    parent_transaction_id: Optional[str] = Field(None, description="ID of parent transaction if this is a split")
-    id: Optional[str] = Field(None, description="Unique transaction identifier")
-    is_recurring: bool = Field(default=False, description="Whether this is a recurring transaction")
-    recurring_id: Optional[str] = Field(None, description="ID of recurring transaction group")
-    parent_transaction_id: Optional[str] = Field(None, description="ID of parent transaction if this is a split")
+    parent_transaction_id: Optional[str] = Field(
+        None, description="ID of parent transaction if this is a split"
+    )
 
     @field_validator("amount")
     @classmethod

@@ -7,9 +7,9 @@ from pathlib import Path
 import pytest
 
 from finance_tracker.csv_parser import (
+    CSVFormat,
     CSVParser,
     CSVParserError,
-    CSVFormat,
     InvalidDataError,
     UnsupportedFormatError,
     parse_csv,

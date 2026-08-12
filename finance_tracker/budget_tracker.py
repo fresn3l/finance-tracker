@@ -10,7 +10,6 @@ This module provides budget management functionality including:
 
 import json
 import logging
-from datetime import date
 from decimal import Decimal
 from pathlib import Path
 from typing import Dict, List, Optional

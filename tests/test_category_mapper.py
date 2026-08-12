@@ -2,8 +2,7 @@
 
 import pytest
 
-from finance_tracker.category_mapper import CategoryMapper, CategoryRule
-from finance_tracker.models import Category
+from finance_tracker.category_mapper import CategoryMapper
 
 
 class TestCategoryMapper:
@@ -161,11 +160,11 @@ class TestCategoryMapper:
         assert category is None
 
     def test_partial_matches(self, mapper):
-        """Test that partial word matches work correctly."""
-        # "grocery" should match even if part of a larger word
-        category = mapper.categorize("GROCERYSTORE123")
+        """Word-boundary rules match grocery as a word, not a substring."""
+        category = mapper.categorize("GROCERY STORE 123")
         assert category is not None
         assert category.name == "Groceries"
+        assert mapper.categorize("GROCERYSTORE123") is None
 
     def test_get_default_mapper(self):
         """Test getting default mapper instance."""

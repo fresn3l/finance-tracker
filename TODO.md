@@ -1,110 +1,57 @@
 # TODO List - Finance Tracker Implementation
 
+This list tracks what is implemented versus what is still missing. Prefer this file and the code over older planning docs.
+
 ## ✅ Completed
-- [X] Set up project structure and dependencies (pyproject.toml, virtual environment, dev tools)
-- [X] Create CSV parser module to read and parse bank statement CSV files
-- [X] Design and implement data models for transactions, categories, and spending patterns
-- [X] Create category mapping system (manual rules and/or ML-based categorization)
-- [X] Build transaction categorization engine to assign categories to transactions
-- [X] Implement spending analysis module (monthly summaries, category breakdowns, trends)
-- [X] Create sample CSV files and test data for development and testing
-- [X] Write unit tests for core functionality (CSV parsing, categorization, analysis)
 
-## 🔄 Next Priority - Integration & CLI
+### Core engine
+- [X] Project structure, packaging (`pyproject.toml`), and dev tooling
+- [X] CSV parser with automatic format detection (3 bank statement formats)
+- [X] Data models for transactions, categories, summaries, budgets, recurring patterns
+- [X] Category mapping (50+ default regex rules) and categorization engine
+- [X] Spending analysis (monthly summaries, category breakdowns, simple trends)
+- [X] Sample CSV files and unit tests for core modules
+- [X] End-to-end workflow: parse CSV → categorize → store → analyze
+- [X] JSON file storage with duplicate detection and import/export (JSON/CSV)
+- [X] YAML configuration and logging
+- [X] CLI and Eel web UI
 
-### Core Integration
-- [ ] Create main application entry point and CLI interface
-- [ ] Implement end-to-end workflow: parse CSV → categorize → analyze
-- [ ] Add command-line interface with subcommands (parse, analyze, export)
-- [ ] Create configuration file support (config.yaml/json) for custom rules
-- [ ] Add logging system for debugging and user feedback
+### Later features (web + CLI)
+- [X] Transaction editing, delete, split, merge, and bulk edit
+- [X] Advanced search and filtering
+- [X] Budget tracking, templates, and in-app alerts
+- [X] Recurring transaction detection and marking
+- [X] Custom category rules manager (add/test/import/export)
+- [X] MIT LICENSE and GitHub Actions CI
 
-### Data Persistence
-- [ ] Create data storage layer (start with JSON file-based, plan for SQLite migration)
-- [ ] Implement transaction repository for saving/loading transactions
-- [ ] Add category persistence (save custom categories and rules)
-- [ ] Implement data import/export (JSON, CSV export of categorized data)
-- [ ] Add duplicate transaction detection
+## 🔄 Still missing (product gaps)
 
-### Error Handling & Validation
-- [ ] Add comprehensive error handling and validation for CSV file formats
-- [ ] Implement data integrity checks (validate transaction consistency)
-- [ ] Add user-friendly error messages and recovery suggestions
-- [ ] Create validation for category rules and mappings
+These are the remaining pieces for a local, secure Mac app that sends a monthly report with month-over-month comparison.
 
-## 🎨 User Interface & Experience
+### Reporting
+- [ ] Month-over-month comparison (totals and per-category $ / % deltas)
+- [ ] Monthly report generation (HTML/PDF)
+- [ ] Scheduled delivery (launchd / local notification; optional email)
+- [ ] Year-over-year comparison
 
-### CLI Enhancements
-- [ ] Add interactive mode for reviewing uncategorized transactions
-- [ ] Implement progress indicators for batch processing
-- [ ] Add colored output and formatted tables for reports
-- [ ] Create summary dashboard in terminal
-- [ ] Add filtering and search capabilities in CLI
+### Mac app & packaging
+- [ ] Native Mac app bundle (`.app`), not Python + Edge
+- [ ] Offline charts (vendor Chart.js; drop the CDN)
+- [ ] Homebrew formula / standalone executable
 
-### Visualization (Future - can use libraries like matplotlib/plotly)
-- [ ] Create visualization components (charts, graphs) for spending patterns
-- [ ] Generate spending trend charts
-- [ ] Create category breakdown pie charts
-- [ ] Add monthly comparison charts
-- [ ] Export visualizations as images/PDF
+### Security
+- [ ] Encryption at rest for `~/.finance-tracker/` data
+- [ ] Tighten local file permissions
+- [ ] Keep the UI fully offline (no third-party script URLs)
 
-### Web Interface (Future Phase)
-- [ ] Build web app framework setup (Flask/FastAPI)
-- [ ] Create CSV file upload interface
-- [ ] Implement dashboard for viewing reports
-- [ ] Add interactive charts and graphs
-- [ ] Create transaction editing interface
+### Analysis extras
+- [ ] First-class multi-account / net worth / transfer detection
+- [ ] Spending forecasts and goals
+- [ ] Learn from user category corrections
 
-## 📊 Advanced Features
+## 📚 Docs & quality (ongoing)
 
-### Reporting & Export
-- [ ] Add export functionality (generate reports, export categorized data)
-- [ ] Create PDF report generation
-- [ ] Implement Excel/CSV export with formatting
-- [ ] Add email report functionality
-- [ ] Create customizable report templates
-
-### Analysis Enhancements
-- [ ] Add budget tracking and alerts
-- [ ] Implement spending forecasts/predictions
-- [ ] Add year-over-year comparison
-- [ ] Create recurring transaction detection
-- [ ] Implement spending goals and tracking
-
-### Categorization Improvements
-- [ ] Add learning from user corrections (improve categorization over time)
-- [ ] Implement category confidence scores
-- [ ] Add bulk category editing
-- [ ] Create category templates/presets
-- [ ] Support for split transactions (multiple categories per transaction)
-
-## 📚 Documentation & Testing
-
-### Documentation
-- [ ] Document API/function usage and create user guide
-- [ ] Create developer documentation (architecture, contributing guide)
-- [ ] Add code examples and tutorials
-- [ ] Create API reference documentation
-- [ ] Write user manual with screenshots/examples
-
-### Testing
-- [ ] Add integration tests for end-to-end workflows
-- [ ] Create performance tests for large datasets
-- [ ] Add test coverage reporting
-- [ ] Implement CI/CD pipeline (GitHub Actions)
-- [ ] Add property-based testing for edge cases
-
-## 🚀 Deployment & Distribution
-
-### Packaging
-- [ ] Create proper Python package distribution (PyPI)
-- [ ] Add installation scripts
-- [ ] Create Docker container
-- [ ] Add system service/daemon support (for scheduled processing)
-
-### Distribution
-- [ ] Create standalone executable (PyInstaller/cx_Freeze)
-- [ ] Add Homebrew formula (for macOS)
-- [ ] Create Windows installer
-- [ ] Add Linux package (deb/rpm)
-
+- [X] Architecture, API, and getting-started docs (keep in sync with code)
+- [X] Tests for editor, budgets, recurring detection, CLI, and web transaction IDs
+- [ ] Performance tests for large datasets
+- [ ] Property-based tests for CSV edge cases
