@@ -5,7 +5,11 @@ from decimal import Decimal
 
 import pytest
 
-from finance_tracker.analyzer import SpendingAnalyzer, analyze_spending
+from finance_tracker.analyzer import (
+    SpendingAnalyzer,
+    analyze_spending,
+    previous_calendar_month,
+)
 from finance_tracker.models import Category, Transaction, TransactionType
 
 
@@ -247,4 +251,103 @@ class TestSpendingAnalyzer:
         for pattern in patterns:
             if pattern.percentage_of_total is not None:
                 assert 0 <= pattern.percentage_of_total <= 100
+
+    def test_previous_calendar_month(self):
+        assert previous_calendar_month(2024, 2) == (2024, 1)
+        assert previous_calendar_month(2024, 1) == (2023, 12)
+
+    def test_month_over_month_totals_and_categories(self, sample_transactions):
+        analyzer = SpendingAnalyzer(sample_transactions)
+        mom = analyzer.get_month_over_month(2024, 2)
+
+        assert mom.year == 2024
+        assert mom.month == 2
+        assert mom.previous_year == 2024
+        assert mom.previous_month == 1
+        assert mom.income.current == Decimal("3000.00")
+        assert mom.income.previous == Decimal("3000.00")
+        assert mom.income.delta == Decimal("0")
+        assert mom.income.percent_change == 0.0
+        assert mom.expenses.current == Decimal("177.30")
+        assert mom.expenses.previous == Decimal("221.66")
+        assert mom.expenses.delta == Decimal("-44.36")
+        assert mom.expenses.percent_change is not None
+        assert mom.expenses.percent_change < 0
+
+        groceries = next(d for d in mom.category_deltas if d.category == "Groceries")
+        assert groceries.current == Decimal("52.30")
+        assert groceries.previous == Decimal("45.67")
+        assert groceries.delta == Decimal("6.63")
+
+        coffee = next(d for d in mom.category_deltas if d.category == "Coffee Shops")
+        assert coffee.current == Decimal("0")
+        assert coffee.previous == Decimal("5.50")
+
+    def test_latest_month_over_month(self, sample_transactions):
+        analyzer = SpendingAnalyzer(sample_transactions)
+        mom = analyzer.get_latest_month_over_month()
+        assert mom is not None
+        assert (mom.year, mom.month) == (2024, 2)
+
+    def test_latest_month_over_month_empty(self):
+        assert SpendingAnalyzer([]).get_latest_month_over_month() is None
+
+    def test_percent_change_when_previous_is_zero(self):
+        analyzer = SpendingAnalyzer(
+            [
+                Transaction(
+                    date=date(2024, 2, 1),
+                    amount=Decimal("-10.00"),
+                    description="NEW MERCHANT",
+                    transaction_type=TransactionType.DEBIT,
+                    category=Category(name="New Category"),
+                )
+            ]
+        )
+        mom = analyzer.get_month_over_month(2024, 2)
+        item = next(d for d in mom.category_deltas if d.category == "New Category")
+        assert item.previous == Decimal("0")
+        assert item.percent_change is None
+
+    def test_cash_flow_excludes_transfers_from_operating(self, sample_transactions):
+        txns = list(sample_transactions) + [
+            Transaction(
+                date=date(2024, 1, 20),
+                amount=Decimal("-500.00"),
+                description="TRANSFER TO SAVINGS",
+                transaction_type=TransactionType.TRANSFER,
+            ),
+            Transaction(
+                date=date(2024, 1, 21),
+                amount=Decimal("200.00"),
+                description="TRANSFER FROM CHECKING",
+                transaction_type=TransactionType.TRANSFER,
+            ),
+        ]
+        cash = SpendingAnalyzer(txns).get_cash_flow(2024, 1)
+        assert cash.income == Decimal("3000.00")
+        assert cash.expenses == Decimal("221.66")
+        assert cash.transfers_out == Decimal("500.00")
+        assert cash.transfers_in == Decimal("200.00")
+        assert cash.net_operating == Decimal("2778.34")
+        assert cash.net_cash == Decimal("2478.34")
+
+    def test_forecast_moving_average(self, sample_transactions):
+        analyzer = SpendingAnalyzer(sample_transactions)
+        overall = analyzer.forecast_next_month(months=3)
+        assert overall is not None
+        assert overall.category is None
+        assert overall.months_used == 2
+        jan = analyzer.get_monthly_summary(2024, 1).total_expenses
+        feb = analyzer.get_monthly_summary(2024, 2).total_expenses
+        assert overall.predicted_amount == (jan + feb) / 2
+
+        groceries = analyzer.forecast_next_month(months=3, category_name="Groceries")
+        assert groceries is not None
+        assert groceries.predicted_amount == (Decimal("45.67") + Decimal("52.30")) / 2
+
+        all_forecasts = analyzer.forecast_all_categories()
+        assert all_forecasts[0].category is None
+        names = {f.category for f in all_forecasts}
+        assert "Groceries" in names
 

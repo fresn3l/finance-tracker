@@ -3,9 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' ws://127.0.0.1:* http://127.0.0.1:* ws://localhost:* http://localhost:*; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'none'; form-action 'self';">
     <title>Finance Tracker</title>
     <link rel="stylesheet" href="style.css">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script src="vendor/chart.umd.min.js"></script>
 </head>
 <body>
     <div class="container">
@@ -19,6 +20,7 @@
                 <button class="tab-btn" data-tab="budgets">Budgets</button>
                 <button class="tab-btn" data-tab="recurring">Recurring</button>
                 <button class="tab-btn" data-tab="rules">Rules</button>
+                <button class="tab-btn" data-tab="review">Review</button>
                 <button class="tab-btn" data-tab="import">Import</button>
             </nav>
         </header>
@@ -41,6 +43,25 @@
                 <div class="stat-card">
                     <h3>Savings Rate</h3>
                     <p class="stat-value" id="savings-rate">0%</p>
+                </div>
+            </div>
+
+            <div class="summary-card" id="mom-card">
+                <h3>Month-over-month</h3>
+                <div id="mom-totals"></div>
+                <div id="mom-categories"></div>
+            </div>
+
+            <div class="charts-grid">
+                <div class="summary-card">
+                    <h3>Cash flow (latest month)</h3>
+                    <div id="cashflow-card"></div>
+                </div>
+                <div class="summary-card">
+                    <h3>Forecast &amp; net worth</h3>
+                    <div id="forecast-card"></div>
+                    <div id="networth-card"></div>
+                    <div id="goals-card"></div>
                 </div>
             </div>
 
@@ -150,6 +171,36 @@
                     <canvas id="top-categories-chart"></canvas>
                 </div>
                 <div class="categories-list" id="categories-list"></div>
+            </div>
+        </div>
+
+        <!-- Review Tab -->
+        <div id="review" class="tab-content">
+            <div class="import-card">
+                <h2>Monthly review</h2>
+                <p>Import is optional. Then check uncategorized transactions, compare to last month, and generate a local report.</p>
+                <div class="budget-controls">
+                    <input type="number" id="review-year" placeholder="Year">
+                    <select id="review-month">
+                        <option value="1">January</option>
+                        <option value="2">February</option>
+                        <option value="3">March</option>
+                        <option value="4">April</option>
+                        <option value="5">May</option>
+                        <option value="6">June</option>
+                        <option value="7">July</option>
+                        <option value="8">August</option>
+                        <option value="9">September</option>
+                        <option value="10">October</option>
+                        <option value="11">November</option>
+                        <option value="12">December</option>
+                    </select>
+                    <button class="btn btn-primary" onclick="runMonthlyReview()">Load review</button>
+                    <button class="btn btn-secondary" onclick="generateMonthlyReport()">Generate HTML/PDF report</button>
+                </div>
+                <div id="review-uncategorized"></div>
+                <div id="review-mom"></div>
+                <div id="review-status"></div>
             </div>
         </div>
 

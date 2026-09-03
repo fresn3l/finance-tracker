@@ -1,12 +1,17 @@
 """Tests for data models."""
 
+import inspect
 from datetime import date
 from decimal import Decimal
 
 import pytest
 
 from finance_tracker.models import (
+    Account,
+    AccountType,
     Category,
+    FinancialGoal,
+    GoalType,
     MonthlySummary,
     SpendingPattern,
     Transaction,
@@ -91,6 +96,31 @@ class TestTransaction:
                 transaction_type=TransactionType.DEBIT,
             )
 
+    def test_transaction_fields_are_not_duplicated(self):
+        """Regression: id/is_recurring/recurring_id were copy-pasted twice."""
+        field_names = list(Transaction.model_fields)
+        assert field_names.count("id") == 1
+        assert field_names.count("is_recurring") == 1
+        assert field_names.count("recurring_id") == 1
+        assert field_names.count("parent_transaction_id") == 1
+        source = inspect.getsource(Transaction)
+        assert source.count('description="Unique transaction identifier"') == 1
+        assert source.count('description="Whether this is a recurring transaction"') == 1
+
+    def test_transaction_recurring_defaults(self):
+        """Recurring fields should default to inactive."""
+        transaction = Transaction(
+            date=date(2024, 1, 15),
+            amount=Decimal("-50.00"),
+            description="Grocery Store",
+            transaction_type=TransactionType.DEBIT,
+            id="abc-123",
+        )
+        assert transaction.id == "abc-123"
+        assert transaction.is_recurring is False
+        assert transaction.recurring_id is None
+        assert transaction.parent_transaction_id is None
+
 
 class TestMonthlySummary:
     """Tests for MonthlySummary model."""
@@ -161,4 +191,25 @@ class TestSpendingPattern:
         assert pattern.transaction_count == 10
         assert pattern.average_transaction == Decimal("50.00")
         assert pattern.percentage_of_total == 25.0
+
+
+class TestAccountAndGoal:
+    def test_account_liability_and_investment(self):
+        card = Account(name="Visa", account_type=AccountType.CREDIT_CARD, balance=Decimal("100"))
+        brokerage = Account(name="Brokerage", account_type=AccountType.INVESTMENT, balance=Decimal("10"))
+        assert card.is_liability
+        assert not card.is_investment
+        assert brokerage.is_investment
+        assert not brokerage.is_liability
+
+    def test_goal_progress(self):
+        goal = FinancialGoal(
+            id="g1",
+            name="Emergency",
+            goal_type=GoalType.SAVINGS,
+            target_amount=Decimal("1000"),
+            current_amount=Decimal("250"),
+        )
+        assert goal.progress_percent == 25.0
+
 

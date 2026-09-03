@@ -8,10 +8,12 @@ import json
 import logging
 import re
 from pathlib import Path
-from typing import Dict, List, Optional, Pattern
+from typing import Dict, List, Optional
 
 from finance_tracker.category_mapper import CategoryMapper, CategoryRule
-from finance_tracker.models import Category, Transaction
+from finance_tracker.models import Transaction
+from finance_tracker.safe_regex import compile_user_regex
+from finance_tracker.secure_store import SecureJSON, chmod_private, ensure_secure_dir
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +29,8 @@ class CategoryRulesManager:
             data_dir: Data directory for storing custom rules
         """
         self.data_dir = Path(data_dir)
-        self.data_dir.mkdir(parents=True, exist_ok=True)
+        ensure_secure_dir(self.data_dir)
+        self.secure = SecureJSON(self.data_dir)
         self.custom_rules_file = self.data_dir / "custom_category_rules.json"
         self.mapper = CategoryMapper()
         self._load_custom_rules()
@@ -38,12 +41,15 @@ class CategoryRulesManager:
             return
 
         try:
-            with open(self.custom_rules_file, "r", encoding="utf-8") as f:
-                data = json.load(f)
+            self.secure.migrate_if_plaintext(self.custom_rules_file)
+            data = self.secure.read(self.custom_rules_file)
 
             for rule_data in data.get("rules", []):
                 try:
-                    pattern = re.compile(rule_data["pattern"])
+                    pattern = compile_user_regex(
+                        rule_data["pattern"],
+                        case_sensitive=rule_data.get("case_sensitive", False),
+                    )
                     rule = CategoryRule(
                         pattern=pattern,
                         category_name=rule_data["category_name"],
@@ -79,7 +85,7 @@ class CategoryRulesManager:
             True if added successfully
         """
         try:
-            compiled_pattern = re.compile(pattern) if case_sensitive else re.compile(pattern, re.IGNORECASE)
+            compiled_pattern = compile_user_regex(pattern, case_sensitive=case_sensitive)
             rule = CategoryRule(
                 pattern=compiled_pattern,
                 category_name=category_name,
@@ -94,7 +100,7 @@ class CategoryRulesManager:
 
             self._save_custom_rules()
             return True
-        except re.error as e:
+        except (re.error, ValueError) as e:
             logger.error(f"Invalid regex pattern: {e}")
             return False
 
@@ -152,7 +158,7 @@ class CategoryRulesManager:
             Dictionary with test results
         """
         try:
-            compiled = re.compile(pattern, re.IGNORECASE)
+            compiled = compile_user_regex(pattern, case_sensitive=False)
             results = []
             for test_str in test_strings:
                 match = compiled.search(test_str)
@@ -165,7 +171,7 @@ class CategoryRulesManager:
                 )
 
             return {"valid": True, "results": results}
-        except re.error as e:
+        except (re.error, ValueError) as e:
             return {"valid": False, "error": str(e), "results": []}
 
     def test_against_transactions(
@@ -183,7 +189,7 @@ class CategoryRulesManager:
             List of matching transaction info
         """
         try:
-            compiled = re.compile(pattern, re.IGNORECASE)
+            compiled = compile_user_regex(pattern, case_sensitive=False)
             matches = []
 
             for transaction in transactions:
@@ -202,7 +208,7 @@ class CategoryRulesManager:
                         break
 
             return matches
-        except re.error:
+        except (re.error, ValueError):
             return []
 
     def _save_custom_rules(self) -> None:
@@ -221,8 +227,7 @@ class CategoryRulesManager:
             )
 
         data = {"rules": custom_rules}
-        with open(self.custom_rules_file, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2)
+        self.secure.write(self.custom_rules_file, data)
 
     def export_rules(self, output_file: Path) -> bool:
         """
@@ -239,6 +244,7 @@ class CategoryRulesManager:
             data = {"rules": rules}
             with open(output_file, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2)
+            chmod_private(output_file)
             return True
         except Exception as e:
             logger.error(f"Error exporting rules: {e}")

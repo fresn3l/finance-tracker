@@ -4,84 +4,30 @@ Based on analysis of the current codebase and common needs in personal finance a
 
 ## 🔥 High Priority - Core Functionality Gaps
 
-### 1. **Transaction Editing & Management** ⭐⭐⭐
-**Why it's critical:**
-- Users can't currently fix categorization mistakes or edit transaction details
-- Essential for data accuracy and user trust
-- Foundation for many other features
+The items below were the original gaps. **Transaction editing, budgets, recurring detection, advanced search, and custom category rules are implemented** in the web UI and CLI. Remaining work is polish, delivery, and packaging — see [TODO.md](../TODO.md).
 
-**What to implement:**
-- Edit transaction description, amount, date, category
-- Delete transactions
-- Split transactions (one transaction → multiple categories)
-- Merge duplicate transactions
-- Bulk edit operations
+### 1. **Transaction Editing & Management** — implemented
+Edit, delete, split, merge, and bulk edit are available in the web Transactions tab and via `finance-tracker edit` / `delete`.
 
-**Implementation complexity:** Medium
-**User value:** Very High
+Still open: merge UX in the web UI. Category corrections now learn merchant mappings for later imports.
 
-### 2. **Budget Tracking & Alerts** ⭐⭐⭐
-**Why it's critical:**
-- Most requested feature in personal finance apps
-- Transforms the app from "tracking" to "planning"
-- Provides actionable insights
+### 2. **Budget Tracking & Alerts** — implemented (in-app)
+Set/list/delete budgets and view alerts in the web Budgets tab and `finance-tracker budget`.
 
-**What to implement:**
-- Set monthly budgets per category
-- Track spending vs. budget with visual indicators
-- Budget alerts (email/notification when approaching limit)
-- Budget templates (quick setup for common categories)
+Still open: email/notification delivery when a threshold is hit.
 
-**Implementation complexity:** Medium
-**User value:** Very High
+### 3. **Recurring Transaction Detection** — implemented
+Detect and mark patterns in the Recurring tab and `finance-tracker recurring detect|mark`.
 
-### 3. **Recurring Transaction Detection** ⭐⭐⭐
-**Why it's critical:**
-- Automatically identifies subscriptions and bills
-- Helps users find forgotten subscriptions
-- Enables better budget planning
+Still open: amount-change alerts and a dedicated subscription dashboard beyond the current list.
 
-**What to implement:**
-- Detect transactions that repeat monthly/weekly/yearly
-- Mark transactions as "recurring" with confidence score
-- Subscription tracking dashboard
-- Alert when recurring transaction amount changes
-- Predict future recurring expenses
+### 4. **Advanced Search & Filtering** — implemented
+Web advanced search plus `finance-tracker list --query/--category/--account/--type/--recurring`.
 
-**Implementation complexity:** Medium-High
-**User value:** High
+Still open: saved filter presets and a structured query builder.
 
-### 4. **Advanced Search & Filtering** ⭐⭐
-**Why it's important:**
-- Current web app has basic transaction list but limited filtering
-- Users need to find specific transactions quickly
-- Enables better data exploration
-
-**What to implement:**
-- Full-text search across descriptions
-- Filter by date range, category, amount range, account
-- Save filter presets
-- Advanced query builder (e.g., "Groceries > $50 in January")
-- Export filtered results
-
-**Implementation complexity:** Low-Medium
-**User value:** High
-
-### 5. **Custom Category Rules UI** ⭐⭐
-**Why it's important:**
-- Users can add rules via code, but no UI
-- Makes the app accessible to non-technical users
-- Improves categorization accuracy over time
-
-**What to implement:**
-- Web UI to add/edit/delete category rules
-- Test rules against existing transactions
-- Rule priority/ordering
-- Import/export rule sets
-- Rule templates
-
-**Implementation complexity:** Medium
-**User value:** Medium-High
+### 5. **Custom Category Rules UI** — implemented
+Rules tab can add, test, import, and export regex rules.
 
 ## 📊 Medium Priority - Enhanced Analytics
 
@@ -200,15 +146,15 @@ Based on analysis of the current codebase and common needs in personal finance a
 
 ## Recommended Implementation Order
 
-### Phase 1: Foundation (Immediate)
+### Phase 1: Foundation — done
 1. Transaction Editing & Management
 2. Advanced Search & Filtering
 3. Custom Category Rules UI
 
-### Phase 2: Planning Features (Next)
-4. Budget Tracking & Alerts
+### Phase 2: Planning Features — mostly done
+4. Budget Tracking & Alerts (in-app; email/push still open)
 5. Recurring Transaction Detection
-6. Year-over-Year Comparisons
+6. Year-over-Year Comparisons — **not started** (nor month-over-month reports)
 
 ### Phase 3: Polish (Later)
 7. Dark Mode

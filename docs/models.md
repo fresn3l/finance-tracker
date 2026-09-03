@@ -46,6 +46,10 @@ Represents a single financial transaction from a bank statement.
 - `reference` (str, optional): Transaction reference number
 - `balance` (Decimal, optional): Account balance after transaction
 - `notes` (str, optional): User-added notes
+- `id` (str, optional): Unique transaction identifier
+- `is_recurring` (bool, default=False): Whether this is a recurring transaction
+- `recurring_id` (str, optional): ID of the recurring transaction group
+- `parent_transaction_id` (str, optional): Parent ID if this row is a split
 
 **Properties:**
 - `is_expense`: Returns True if transaction is an expense
@@ -62,9 +66,44 @@ transaction = Transaction(
     amount=Decimal("-50.00"),
     description="Grocery Store",
     transaction_type=TransactionType.DEBIT,
-    category=Category(name="Groceries")
+    category=Category(name="Groceries"),
+    id="optional-id",
 )
 ```
+
+### Budget
+
+Monthly spending limit for a category.
+
+**Fields:**
+- `category_name` (str): Category name
+- `year` (int) / `month` (int): Budget period
+- `amount` (Decimal): Budget amount
+- `alert_threshold` (Decimal, default=0.8): Alert when spending reaches this fraction
+- `notes` (str, optional)
+
+### RecurringTransaction
+
+Detected repeating payment (subscription, bill, etc.).
+
+**Fields:**
+- `id` (str): Pattern ID
+- `description_pattern` (str): Normalized merchant text
+- `amount` (Decimal): Typical amount
+- `frequency` (str): `weekly`, `monthly`, or `yearly`
+- `confidence` (float): 0–1 score
+- `last_seen` / `next_expected` (date)
+- `transaction_count` (int)
+
+### SplitTransaction
+
+One original transaction split across categories.
+
+**Fields:**
+- `parent_transaction_id` (str)
+- `amount` (Decimal)
+- `category` (Category)
+- `description` (str, optional)
 
 ### MonthlySummary
 
@@ -95,6 +134,18 @@ summary = MonthlySummary(
     category_breakdown={"Groceries": Decimal("500.00")}
 )
 ```
+
+### MonthOverMonthComparison / CategoryDelta / ComparisonDelta
+
+Dollar and percent change for income, expenses, net, and each category vs the prior calendar month.
+
+### CashFlowSummary
+
+Operating income/expenses vs internal transfers for a month.
+
+### Account / FinancialGoal / SpendingForecast
+
+Balances (checking, savings, credit card, loan, investment, cash), savings/spend/debt/investment targets, and a moving-average next-month forecast.
 
 ### SpendingPattern
 

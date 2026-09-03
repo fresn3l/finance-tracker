@@ -28,7 +28,13 @@ Example Usage:
 
 __version__ = "0.1.0"
 
-# Core models
+from finance_tracker.analyzer import SpendingAnalyzer, analyze_spending
+from finance_tracker.categorizer import (
+    CategorizationStats,
+    TransactionCategorizer,
+    categorize_transactions,
+)
+from finance_tracker.csv_parser import CSVFormat, CSVParser, parse_csv
 from finance_tracker.models import (
     Category,
     MonthlySummary,
@@ -36,19 +42,8 @@ from finance_tracker.models import (
     Transaction,
     TransactionType,
 )
-
-# Main workflow
-from finance_tracker.workflow import FinanceTrackerWorkflow, process_csv
-
-# Convenience imports
-from finance_tracker.analyzer import SpendingAnalyzer, analyze_spending
-from finance_tracker.categorizer import (
-    CategorizationStats,
-    TransactionCategorizer,
-    categorize_transactions,
-)
-from finance_tracker.csv_parser import CSVParser, CSVFormat, parse_csv
 from finance_tracker.storage import StorageManager
+from finance_tracker.workflow import FinanceTrackerWorkflow, process_csv
 
 __all__ = [
     # Version

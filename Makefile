@@ -1,4 +1,4 @@
-.PHONY: help install install-dev test lint format type-check clean run
+.PHONY: help install install-dev test lint format type-check clean run mac-app
 
 help:
 	@echo "Available commands:"
@@ -10,6 +10,7 @@ help:
 	@echo "  make type-check   - Run type checker"
 	@echo "  make clean        - Clean build artifacts"
 	@echo "  make run          - Run the application"
+	@echo "  make mac-app      - Print how to build the Mac .app (must run on macOS)"
 
 install:
 	pip install -e .
@@ -42,3 +43,9 @@ clean:
 run:
 	python -m finance_tracker.cli
 
+mac-app:
+	@echo "Build on macOS (this Linux environment cannot produce a signed .app):"
+	@echo "  pip install -e '.[mac]'"
+	@echo "  pyinstaller packaging/pyinstaller.spec"
+	@echo "  open dist/Finance\\ Tracker.app"
+	@echo "Then: finance-tracker schedule install"

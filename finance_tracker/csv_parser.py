@@ -238,7 +238,16 @@ class CSVParser:
                             transaction_type = TransactionType.TRANSFER
                         else:
                             # Infer from amount
-                            transaction_type = TransactionType.CREDIT if amount > 0 else TransactionType.DEBIT
+                            transaction_type = (
+                                TransactionType.CREDIT if amount > 0 else TransactionType.DEBIT
+                            )
+
+                        # Keep debit amounts negative and credit amounts positive
+                        # so they match the standard CSV convention.
+                        if transaction_type == TransactionType.DEBIT and amount > 0:
+                            amount = -amount
+                        elif transaction_type == TransactionType.CREDIT and amount < 0:
+                            amount = abs(amount)
 
                         # Parse category if available
                         category = None

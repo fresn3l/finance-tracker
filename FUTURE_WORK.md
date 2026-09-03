@@ -1,71 +1,56 @@
 # Future Work
 
-This document outlines potential enhancements and features for the finance tracker application.
+This document outlines potential enhancements. Several items that used to live here are **already implemented** — see [TODO.md](TODO.md) and [docs/FEATURE_RECOMMENDATIONS.md](docs/FEATURE_RECOMMENDATIONS.md) before rebuilding them.
+
+Already in the codebase: CSV import, categorization (including custom rules UI and learning from category corrections), encrypted JSON storage, CLI + Eel web UI (localhost, vendored Chart.js), transaction edit/split/merge, search/filter, in-app budgets, recurring detection, month-over-month comparison, cash flow / forecasts / goals / accounts, local HTML/PDF monthly reports, macOS notifications, launchd scheduling, and Mac app packaging scaffolding.
 
 ## Enhanced Categorization
 
-- **Machine Learning Integration**: Implement ML-based transaction categorization using natural language processing to automatically categorize transactions based on merchant names and descriptions
-- **Custom Category Rules**: Allow users to create custom categorization rules with regex patterns and keyword matching
-- **Category Learning**: System learns from user corrections to improve categorization accuracy over time
-- **Multi-account Support**: Handle transactions from multiple bank accounts and credit cards with different CSV formats
+- **Machine Learning Integration**: NLP-based categorization from merchant names
+- **Richer multi-account**: Full portfolio and loan amortization (balances + net worth already exist)
 
 ## Advanced Analytics
 
-- **Budget Tracking**: Set monthly budgets per category and track spending against budgets with alerts
-- **Spending Trends**: Long-term trend analysis (year-over-year comparisons, seasonal patterns)
-- **Predictive Analytics**: Forecast future spending based on historical patterns
-- **Goal Setting**: Set financial goals (savings targets, debt reduction) and track progress
-- **Recurring Transaction Detection**: Automatically identify and track recurring bills and subscriptions
+- **Year-over-year comparisons** and seasonal patterns
+- **Recurring amount-change alerts**: Notify when a subscription price changes
 
 ## Data Management
 
-- **Database Migration**: Migrate from file-based storage to a proper database (SQLite, PostgreSQL) for better performance and scalability
-- **Data Import/Export**: Support additional formats (OFX, QIF, JSON) beyond CSV
-- **Data Backup & Sync**: Cloud backup and synchronization across devices
-- **Transaction Editing**: Allow users to manually edit, split, or merge transactions
-- **Duplicate Detection**: Automatically detect and handle duplicate transactions
+- **Database Migration**: SQLCipher instead of encrypted JSON files
+- **Additional import formats**: OFX, QIF
+- **Data Backup & Sync**: Optional encrypted backup; keep local-first as the default
 
 ## User Experience
 
-- **Web Dashboard**: Create a modern, responsive web interface with real-time updates
-- **Mobile App**: Develop mobile applications (iOS/Android) for on-the-go expense tracking
-- **Dark Mode**: Implement dark mode theme support
-- **Accessibility**: Ensure WCAG compliance for accessibility
-- **Multi-language Support**: Internationalization for multiple languages
+- **Signed/notarized Mac app**: Scaffolding is in `packaging/`; build on macOS
+- **Dark Mode**
+- **Accessibility**: WCAG compliance
+- **Multi-language Support**
 
 ## Security & Privacy
 
-- **Data Encryption**: Encrypt sensitive financial data at rest and in transit
-- **User Authentication**: Implement secure login and user account management
-- **Privacy Controls**: Granular privacy settings for data sharing and storage
-- **Local-first Architecture**: Option to run entirely offline with local data storage
+- **Local-first Architecture**: Already the default; keep it that way (no required cloud)
 
 ## Integration & Automation
 
-- **Bank API Integration**: Direct integration with bank APIs (Plaid, Yodlee) for automatic transaction import
-- **Email Parsing**: Parse transaction emails from banks to automatically import transactions
-- **Calendar Integration**: Link transactions to calendar events for context
-- **Receipt Scanning**: OCR-based receipt scanning and automatic transaction creation
-- **Tax Preparation**: Export categorized data in formats compatible with tax software
+- **Bank API Integration**: Plaid/Yodlee (optional; conflicts with local-only unless user opts in)
+- **Email delivery**: Only if you want the monthly report leaving the machine (notification is local today)
+- **Receipt Scanning**: OCR
+- **Tax Preparation**: Export formats for tax software
 
 ## Reporting & Visualization
 
-- **Custom Reports**: Allow users to create custom report templates
-- **PDF Export**: Generate PDF reports for sharing or printing
-- **Interactive Charts**: More interactive and customizable chart types (heatmaps, sankey diagrams)
-- **Comparative Analysis**: Compare spending across different time periods or categories
-- **Export to Spreadsheets**: Export data to Excel/Google Sheets with formatting
+- **Custom report templates**
+- **Richer charts**: heatmaps, sankey diagrams
+- **Export to Spreadsheets**: formatted Excel
 
 ## Collaboration Features
 
-- **Shared Budgets**: Collaborate on budgets with family members or roommates
-- **Expense Sharing**: Split expenses and track shared costs
-- **Notifications**: Email or push notifications for budget alerts and spending milestones
+- **Shared Budgets** / **Expense Sharing** — low priority for a single-user local app
+- **Notifications**: Email or push for budget alerts (in-app alerts already exist)
 
 ## Performance & Scalability
 
-- **Optimization**: Optimize for handling large datasets (years of transaction history)
-- **Caching**: Implement caching strategies for faster report generation
-- **Batch Processing**: Efficient batch processing for multiple CSV files
-- **API Development**: Create RESTful API for third-party integrations
-
+- **Optimization** for years of history
+- **Caching** for report generation
+- **Batch Processing** for multiple CSV files

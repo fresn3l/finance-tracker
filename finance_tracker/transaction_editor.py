@@ -6,9 +6,11 @@ This module provides functionality to edit, delete, split, and merge transaction
 
 import logging
 import uuid
+from datetime import date
 from decimal import Decimal
-from typing import Dict, List, Optional
+from typing import List, Optional
 
+from finance_tracker.category_learner import CategoryLearner
 from finance_tracker.models import Category, SplitTransaction, Transaction
 
 logger = logging.getLogger(__name__)
@@ -17,21 +19,25 @@ logger = logging.getLogger(__name__)
 class TransactionEditor:
     """Transaction editing and management."""
 
-    def __init__(self, transaction_repo):
+    def __init__(self, transaction_repo, learner: Optional[CategoryLearner] = None):
         """
         Initialize transaction editor.
 
         Args:
             transaction_repo: TransactionRepository instance
+            learner: Optional CategoryLearner; created from the repo data dir if omitted
         """
         self.repo = transaction_repo
+        self.learner = learner
+        if self.learner is None and getattr(transaction_repo, "data_dir", None) is not None:
+            self.learner = CategoryLearner(transaction_repo.data_dir)
 
     def edit_transaction(
         self,
         transaction_id: str,
         description: Optional[str] = None,
         amount: Optional[Decimal] = None,
-        date: Optional = None,
+        date: Optional[date] = None,
         category: Optional[Category] = None,
         notes: Optional[str] = None,
     ) -> Optional[Transaction]:
@@ -68,7 +74,9 @@ class TransactionEditor:
 
         updated = Transaction(**updated_data)
         self.repo.update(updated)
-        return updated
+        if category is not None:
+            self._learn_and_apply(updated.description, category, skip_id=transaction_id)
+        return self.repo.get_by_id(transaction_id) or updated
 
     def delete_transaction(self, transaction_id: str) -> bool:
         """
@@ -176,13 +184,12 @@ class TransactionEditor:
 
         if keep_first:
             # Use first transaction as base
-            merged = transactions[0]
-            # Sum amounts
             total_amount = sum(t.amount for t in transactions)
-            merged = Transaction(
-                **merged.model_dump(),
-                amount=total_amount,
-                description=f"{merged.description} (merged)",
+            merged = transactions[0].model_copy(
+                update={
+                    "amount": total_amount,
+                    "description": f"{transactions[0].description} (merged)",
+                }
             )
         else:
             # Combine all details
@@ -242,6 +249,35 @@ class TransactionEditor:
             updated = Transaction(**updated_data)
             if self.repo.update(updated):
                 updated_count += 1
+                if category is not None:
+                    self._learn_and_apply(updated.description, category, skip_id=txn_id)
 
         return updated_count
+
+    def _learn_and_apply(
+        self, description: str, category: Category, skip_id: Optional[str] = None
+    ) -> int:
+        """Remember this merchant and recategorize other rows with the same name."""
+        if self.learner is None:
+            return 0
+        self.learner.learn(description, category)
+        current = self.repo.load_all()
+        revised = self.learner.apply_to_similar(
+            current, description, category, skip_id=skip_id
+        )
+        if revised != current:
+            changed = sum(
+                1
+                for old, new in zip(current, revised)
+                if (old.category is None) != (new.category is None)
+                or (
+                    old.category is not None
+                    and new.category is not None
+                    and old.category.name != new.category.name
+                )
+            )
+            if changed:
+                self.repo._save_all(revised)
+            return changed
+        return 0
 

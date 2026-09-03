@@ -47,8 +47,19 @@ from pathlib import Path
 from typing import Dict, List, Optional, Set
 
 from finance_tracker.models import Category, Transaction
+from finance_tracker.secure_store import SecureJSON, chmod_private, ensure_secure_dir
 
 logger = logging.getLogger(__name__)
+
+_CSV_FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
+
+
+def sanitize_csv_cell(value: str) -> str:
+    """Neutralize spreadsheet formula injection in exported CSV cells."""
+    text = "" if value is None else str(value)
+    if text.startswith(_CSV_FORMULA_PREFIXES):
+        return "'" + text
+    return text
 
 
 class JSONEncoder(json.JSONEncoder):
@@ -66,15 +77,17 @@ class JSONEncoder(json.JSONEncoder):
 class TransactionRepository:
     """Repository for managing transaction storage."""
 
-    def __init__(self, data_dir: Path):
+    def __init__(self, data_dir: Path, secure: Optional[SecureJSON] = None):
         """
         Initialize transaction repository.
 
         Args:
             data_dir: Directory where transaction data is stored
+            secure: Optional encrypted JSON helper
         """
         self.data_dir = Path(data_dir)
-        self.data_dir.mkdir(parents=True, exist_ok=True)
+        ensure_secure_dir(self.data_dir)
+        self.secure = secure or SecureJSON(self.data_dir)
         self.transactions_file = self.data_dir / "transactions.json"
 
     def save(self, transactions: List[Transaction]) -> None:
@@ -102,16 +115,12 @@ class TransactionRepository:
 
             all_transactions = existing + new_transactions
 
-            # Serialize to JSON
             data = {
                 "transactions": [
                     self._serialize_transaction(t) for t in all_transactions
                 ]
             }
-
-            # Write to file
-            with open(self.transactions_file, "w", encoding="utf-8") as f:
-                json.dump(data, f, indent=2, cls=JSONEncoder)
+            self.secure.write(self.transactions_file, data)
 
             logger.info(f"Saved {len(new_transactions)} new transactions (total: {len(all_transactions)})")
 
@@ -130,17 +139,25 @@ class TransactionRepository:
             return []
 
         try:
-            with open(self.transactions_file, "r", encoding="utf-8") as f:
-                data = json.load(f)
+            self.secure.migrate_if_plaintext(self.transactions_file)
+            data = self.secure.read(self.transactions_file)
 
             transactions = []
+            missing_ids = False
             for txn_data in data.get("transactions", []):
                 try:
                     transaction = self._deserialize_transaction(txn_data)
+                    if not transaction.id:
+                        transaction = transaction.model_copy(update={"id": str(uuid.uuid4())})
+                        missing_ids = True
                     transactions.append(transaction)
                 except Exception as e:
                     logger.warning(f"Error deserializing transaction: {e}")
                     continue
+
+            if missing_ids:
+                self._save_all(transactions)
+                logger.info("Assigned missing transaction IDs")
 
             logger.info(f"Loaded {len(transactions)} transactions")
             return transactions
@@ -284,8 +301,7 @@ class TransactionRepository:
                 self._serialize_transaction(t) for t in transactions
             ]
         }
-        with open(self.transactions_file, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2, cls=JSONEncoder)
+        self.secure.write(self.transactions_file, data)
 
     def transaction_id(self, transaction: Transaction) -> str:
         """
@@ -404,15 +420,17 @@ class TransactionRepository:
 class CategoryRepository:
     """Repository for managing category storage."""
 
-    def __init__(self, data_dir: Path):
+    def __init__(self, data_dir: Path, secure: Optional[SecureJSON] = None):
         """
         Initialize category repository.
 
         Args:
             data_dir: Directory where category data is stored
+            secure: Optional encrypted JSON helper
         """
         self.data_dir = Path(data_dir)
-        self.data_dir.mkdir(parents=True, exist_ok=True)
+        ensure_secure_dir(self.data_dir)
+        self.secure = secure or SecureJSON(self.data_dir)
         self.categories_file = self.data_dir / "categories.json"
 
     def save_custom_categories(self, categories: List[Category]) -> None:
@@ -434,7 +452,6 @@ class CategoryRepository:
 
             all_categories = existing + new_categories
 
-            # Serialize to JSON
             data = {
                 "categories": [
                     {
@@ -445,10 +462,7 @@ class CategoryRepository:
                     for c in all_categories
                 ]
             }
-
-            # Write to file
-            with open(self.categories_file, "w", encoding="utf-8") as f:
-                json.dump(data, f, indent=2)
+            self.secure.write(self.categories_file, data)
 
             logger.info(f"Saved {len(new_categories)} new categories (total: {len(all_categories)})")
 
@@ -467,8 +481,8 @@ class CategoryRepository:
             return []
 
         try:
-            with open(self.categories_file, "r", encoding="utf-8") as f:
-                data = json.load(f)
+            self.secure.migrate_if_plaintext(self.categories_file)
+            data = self.secure.read(self.categories_file)
 
             categories = []
             for cat_data in data.get("categories", []):
@@ -501,8 +515,9 @@ class StorageManager:
             data_dir = Path.home() / ".finance-tracker"
 
         self.data_dir = Path(data_dir)
-        self.transaction_repo = TransactionRepository(self.data_dir)
-        self.category_repo = CategoryRepository(self.data_dir)
+        self.secure = SecureJSON(self.data_dir)
+        self.transaction_repo = TransactionRepository(self.data_dir, self.secure)
+        self.category_repo = CategoryRepository(self.data_dir, self.secure)
 
     def export_transactions_json(self, output_file: Path) -> None:
         """
@@ -520,6 +535,7 @@ class StorageManager:
 
         with open(output_file, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2, cls=JSONEncoder)
+        chmod_private(output_file)
 
         logger.info(f"Exported {len(transactions)} transactions to {output_file}")
 
@@ -555,17 +571,22 @@ class StorageManager:
             for transaction in transactions:
                 row = {
                     "Date": transaction.date.isoformat(),
-                    "Description": transaction.description,
+                    "Description": sanitize_csv_cell(transaction.description),
                     "Amount": str(transaction.amount),
-                    "Category": transaction.category.name if transaction.category else "",
-                    "Parent Category": transaction.category.parent if transaction.category else "",
+                    "Category": sanitize_csv_cell(
+                        transaction.category.name if transaction.category else ""
+                    ),
+                    "Parent Category": sanitize_csv_cell(
+                        transaction.category.parent if transaction.category else ""
+                    ),
                     "Type": transaction.transaction_type.value,
-                    "Account": transaction.account or "",
-                    "Reference": transaction.reference or "",
+                    "Account": sanitize_csv_cell(transaction.account or ""),
+                    "Reference": sanitize_csv_cell(transaction.reference or ""),
                     "Balance": str(transaction.balance) if transaction.balance else "",
-                    "Notes": transaction.notes or "",
+                    "Notes": sanitize_csv_cell(transaction.notes or ""),
                 }
                 writer.writerow(row)
 
+        chmod_private(output_file)
         logger.info(f"Exported {len(transactions)} transactions to {output_file}")
 

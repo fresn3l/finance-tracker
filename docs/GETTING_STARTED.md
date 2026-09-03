@@ -83,8 +83,24 @@ Savings Rate:  58.3%
 # View all monthly summaries
 finance-tracker summary
 
-# View specific month
+# View specific month (prints month-over-month vs the prior month)
 finance-tracker summary --year 2024 --month 1
+```
+
+### Monthly review and report
+
+```bash
+# Dedicated workflow: optional --csv import, uncategorized list, MoM, cash flow, HTML+PDF
+finance-tracker review --year 2024 --month 1
+
+# Report only
+finance-tracker report --year 2024 --month 1 --notify
+```
+
+On macOS, install a launchd agent that runs the previous month's report at 09:00 on the 1st (offline, Notification Center, no email):
+
+```bash
+finance-tracker schedule install
 ```
 
 ### Category Analysis
@@ -116,27 +132,45 @@ The web app will:
 
 ### Web App Features
 
-1. **Dashboard Tab**: Overview with charts and statistics
-2. **Transactions Tab**: Browse and search all transactions
+1. **Dashboard Tab**: Overview with charts, month-over-month, cash flow, forecast, net worth
+2. **Transactions Tab**: Browse, search, edit, delete, and split transactions
 3. **Categories Tab**: View category breakdowns and patterns
-4. **Import Tab**: Upload new CSV files
+4. **Budgets Tab**: Set category budgets and review alerts
+5. **Recurring Tab**: Detect subscriptions and bills
+6. **Rules Tab**: Manage custom categorization rules
+7. **Review Tab**: Load a month, fix uncategorized rows, generate HTML/PDF
+8. **Import Tab**: Upload new CSV files
 
 ## Common Workflows
 
 ### Workflow 1: Monthly Review
 
 ```bash
-# 1. Import monthly statement
+# One command covers import → uncategorized → MoM → report
+finance-tracker review --year 2024 --month 1 --csv january_2024.csv
+
+# Or step by step:
 finance-tracker import-csv january_2024.csv
-
-# 2. View summary
-finance-tracker summary --year 2024 --month 1
-
-# 3. Check top categories
-finance-tracker categories
-
-# 4. Review uncategorized
 finance-tracker uncategorized
+finance-tracker edit <transaction-id> --category Groceries
+# Later imports of that merchant use Groceries automatically
+finance-tracker summary --year 2024 --month 1
+finance-tracker report --year 2024 --month 1
+```
+
+### Workflow 2: Budgets and Recurring Bills
+
+```bash
+# Set a grocery budget for the current month
+finance-tracker budget set Groceries --amount 500
+
+# Check status and alerts
+finance-tracker budget list
+finance-tracker budget alerts
+
+# Find subscriptions
+finance-tracker recurring detect
+finance-tracker recurring mark
 ```
 
 ### Workflow 2: Year-End Analysis
@@ -183,6 +217,8 @@ All your data is stored in:
 ~/.finance-tracker/
 ├── transactions.json    # All your transactions
 ├── categories.json      # Custom categories
+├── budgets.json         # Category budgets
+├── custom_category_rules.json
 └── config.yaml          # Application settings
 ```
 

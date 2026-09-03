@@ -94,18 +94,7 @@ class TransactionCategorizer:
         category = self.mapper.categorize(transaction.description)
 
         if category:
-            # Create new transaction with category
-            return Transaction(
-                date=transaction.date,
-                amount=transaction.amount,
-                description=transaction.description,
-                category=category,
-                transaction_type=transaction.transaction_type,
-                account=transaction.account,
-                reference=transaction.reference,
-                balance=transaction.balance,
-                notes=transaction.notes,
-            )
+            return transaction.model_copy(update={"category": category})
 
         return transaction
 

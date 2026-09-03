@@ -6,6 +6,21 @@ let topCategoriesChart = null;
 let currentPage = 1;
 const itemsPerPage = 50;
 
+function escapeHtml(value) {
+    if (value == null) return '';
+    return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function safeDomId(value) {
+    const s = String(value == null ? '' : value);
+    return /^[A-Za-z0-9._-]+$/.test(s) ? s : '';
+}
+
 // Initialize app
 document.addEventListener('DOMContentLoaded', async () => {
     setupTabs();
@@ -168,8 +183,148 @@ async function loadDashboard() {
         
         const categoryBreakdown = await eel.get_category_breakdown()();
         updateCategoryChart(categoryBreakdown);
+
+        const mom = await eel.get_month_over_month()();
+        updateMom(mom);
+
+        if (mom && mom.year) {
+            const cash = await eel.get_cash_flow(mom.year, mom.month)();
+            updateCashFlow(cash);
+        }
+        const forecasts = await eel.get_forecasts()();
+        updateForecasts(forecasts);
+        const accounts = await eel.get_accounts()();
+        updateNetWorth(accounts);
+        const goals = await eel.get_goals()();
+        updateGoals(goals);
     } catch (error) {
         console.error('Error loading dashboard:', error);
+    }
+}
+
+function formatDelta(delta) {
+    const amount = parseFloat(delta.delta);
+    const pct = delta.percent_change == null ? 'n/a' : `${delta.percent_change >= 0 ? '+' : ''}${delta.percent_change.toFixed(1)}%`;
+    const cls = amount > 0 ? 'mom-up' : (amount < 0 ? 'mom-down' : '');
+    return `<span class="${cls}">${formatCurrency(delta.delta)} (${pct})</span>`;
+}
+
+function updateMom(mom, totalsId = 'mom-totals', catsId = 'mom-categories') {
+    const totals = document.getElementById(totalsId);
+    const cats = document.getElementById(catsId);
+    if (!totals) return;
+    if (!mom || !mom.year) {
+        totals.innerHTML = '<p>Import at least two months of data to see a comparison.</p>';
+        if (cats) cats.innerHTML = '';
+        return;
+    }
+    const period = `${mom.year}-${String(mom.month).padStart(2, '0')}`;
+    const prev = `${mom.previous_year}-${String(mom.previous_month).padStart(2, '0')}`;
+    totals.innerHTML = `
+        <p>${period} vs ${prev}</p>
+        <table class="mom-table">
+            <tr><th></th><th>${period}</th><th>${prev}</th><th>Change</th></tr>
+            <tr><td>Income</td><td>${formatCurrency(mom.income.current)}</td><td>${formatCurrency(mom.income.previous)}</td><td>${formatDelta(mom.income)}</td></tr>
+            <tr><td>Expenses</td><td>${formatCurrency(mom.expenses.current)}</td><td>${formatCurrency(mom.expenses.previous)}</td><td>${formatDelta(mom.expenses)}</td></tr>
+            <tr><td>Net</td><td>${formatCurrency(mom.net.current)}</td><td>${formatCurrency(mom.net.previous)}</td><td>${formatDelta(mom.net)}</td></tr>
+        </table>`;
+    if (!cats) return;
+    const rows = (mom.category_deltas || []).map(c =>
+        `<tr><td>${escapeHtml(c.category)}</td><td>${formatCurrency(c.current)}</td><td>${formatCurrency(c.previous)}</td><td>${formatDelta(c)}</td></tr>`
+    ).join('');
+    cats.innerHTML = rows
+        ? `<h4>Categories</h4><table class="mom-table"><tr><th>Category</th><th>${period}</th><th>${prev}</th><th>Change</th></tr>${rows}</table>`
+        : '';
+}
+
+async function runMonthlyReview() {
+    const year = parseInt(document.getElementById('review-year').value, 10) || new Date().getFullYear();
+    const month = parseInt(document.getElementById('review-month').value, 10);
+    const mom = await eel.get_month_over_month(year, month)();
+    const wrap = document.getElementById('review-mom');
+    wrap.innerHTML = '<div id="review-mom-totals"></div><div id="review-mom-cats"></div><div id="review-cashflow"></div>';
+    updateMom(mom, 'review-mom-totals', 'review-mom-cats');
+    const cash = await eel.get_cash_flow(year, month)();
+    const cashEl = document.getElementById('review-cashflow');
+    if (cashEl && cash && cash.net_operating != null) {
+        cashEl.innerHTML = `<p>Operating net ${formatCurrency(cash.net_operating)}; net cash ${formatCurrency(cash.net_cash)} (transfers excluded from operating).</p>`;
+    }
+    const txns = await eel.search_transactions()();
+    const uncat = (txns || []).filter(t => {
+        const parts = (t.date || '').split('-');
+        return Number(parts[0]) === year && Number(parts[1]) === month && !t.category;
+    });
+    const uncatEl = document.getElementById('review-uncategorized');
+    if (uncatEl) {
+        if (uncat.length === 0) {
+            uncatEl.innerHTML = '<p>No uncategorized transactions this month.</p>';
+        } else {
+            uncatEl.innerHTML = '<h4>Uncategorized — fix on the Transactions tab</h4><ul>' +
+                uncat.map(t => `<li>${escapeHtml(t.id || '')} ${escapeHtml(t.date)} ${escapeHtml(t.description)} ${formatCurrency(t.amount)}</li>`).join('') +
+                '</ul>';
+        }
+    }
+    document.getElementById('review-status').textContent = 'Review loaded. Generate a report when categories look right.';
+}
+
+function updateCashFlow(cash) {
+    const el = document.getElementById('cashflow-card');
+    if (!el) return;
+    if (!cash || cash.net_operating == null) {
+        el.innerHTML = '<p>No cash-flow data yet.</p>';
+        return;
+    }
+    el.innerHTML = `
+        <p>Operating income ${formatCurrency(cash.income)} · expenses ${formatCurrency(cash.expenses)}</p>
+        <p>Net operating ${formatCurrency(cash.net_operating)} · net cash ${formatCurrency(cash.net_cash)}</p>
+        <p>Transfers in ${formatCurrency(cash.transfers_in)} · out ${formatCurrency(cash.transfers_out)}</p>`;
+}
+
+function updateForecasts(forecasts) {
+    const el = document.getElementById('forecast-card');
+    if (!el) return;
+    if (!forecasts || !forecasts.length) {
+        el.innerHTML = '<p>Need at least one month of history to forecast.</p>';
+        return;
+    }
+    const rows = forecasts.slice(0, 6).map(f =>
+        `<tr><td>${escapeHtml(f.category || 'Total expenses')}</td><td>${formatCurrency(f.predicted_amount)}</td></tr>`
+    ).join('');
+    el.innerHTML = `<h4>Next-month forecast</h4><table class="mom-table">${rows}</table>`;
+}
+
+function updateNetWorth(payload) {
+    const el = document.getElementById('networth-card');
+    if (!el) return;
+    if (!payload || !payload.accounts || !payload.accounts.length) {
+        el.innerHTML = '<p>Add accounts with <code>finance-tracker account add</code>.</p>';
+        return;
+    }
+    el.innerHTML = `<p>Net worth ${formatCurrency(payload.net_worth)} (${payload.accounts.length} account(s))</p>`;
+}
+
+function updateGoals(goals) {
+    const el = document.getElementById('goals-card');
+    if (!el) return;
+    if (!goals || !goals.length) {
+        el.innerHTML = '';
+        return;
+    }
+    el.innerHTML = '<h4>Goals</h4><ul>' + goals.map(g => {
+        const pct = g.progress_percent == null ? 'n/a' : `${g.progress_percent.toFixed(0)}%`;
+        return `<li>${escapeHtml(g.name)} (${escapeHtml(g.goal_type)}) ${pct} of ${formatCurrency(g.target_amount)}</li>`;
+    }).join('') + '</ul>';
+}
+
+async function generateMonthlyReport() {
+    const year = parseInt(document.getElementById('review-year').value, 10) || new Date().getFullYear();
+    const month = parseInt(document.getElementById('review-month').value, 10);
+    const result = await eel.generate_report(year, month, true)();
+    const status = document.getElementById('review-status');
+    if (result.success) {
+        status.textContent = 'Wrote ' + Object.values(result.files).join(', ');
+    } else {
+        status.textContent = 'Error: ' + (result.error || 'unknown');
     }
 }
 
@@ -326,36 +481,13 @@ async function loadTransactions(page = 1) {
 
 function displayTransactions(transactions) {
     const tbody = document.getElementById('transactions-tbody');
-    tbody.innerHTML = '';
-    
     if (transactions.length === 0) {
         tbody.innerHTML = '<tr><td colspan="7" class="empty-state">No transactions found.</td></tr>';
         return;
     }
-    
-    transactions.forEach(txn => {
-        const row = document.createElement('tr');
-        const amount = parseFloat(txn.amount);
-        const isExpense = amount < 0;
-        const amountClass = isExpense ? 'expense' : 'income';
-        
-        row.innerHTML = `
-            <td><input type="checkbox" class="transaction-checkbox" value="${txn.id}" onchange="toggleTransactionSelect('${txn.id}')"></td>
-            <td>${txn.date}</td>
-            <td>${txn.description} ${txn.is_recurring ? '🔄' : ''}</td>
-            <td>${txn.category ? txn.category.name : '<span class="uncategorized">Uncategorized</span>'}</td>
-            <td class="${amountClass}">${formatCurrency(Math.abs(amount))}</td>
-            <td><span class="badge">${txn.transaction_type}</span></td>
-            <td>
-                <button class="btn btn-small btn-secondary" onclick="editTransaction('${txn.id}')">Edit</button>
-                <button class="btn btn-small btn-danger" onclick="deleteTransaction('${txn.id}')">Delete</button>
-                <button class="btn btn-small btn-secondary" onclick="splitTransaction('${txn.id}')">Split</button>
-            </td>
-        `;
-        tbody.appendChild(row);
-    });
-    
-    // Load filter options
+
+    tbody.innerHTML = transactions.map(txn => createTransactionRow(txn)).join('');
+
     eel.get_search_filters()().then(filters => {
         updateFilterOptions(filters);
     }).catch(err => console.error('Error loading filters:', err));
@@ -424,7 +556,7 @@ function displayCategoriesList(patterns) {
         item.className = 'category-item';
         item.innerHTML = `
             <div>
-                <strong>${pattern.category}</strong>
+                <strong>${escapeHtml(pattern.category)}</strong>
                 <div style="font-size: 12px; color: #64748b; margin-top: 5px;">
                     ${pattern.transaction_count} transactions • Avg: ${formatCurrency(pattern.average_transaction)}
                 </div>
@@ -623,7 +755,7 @@ async function splitTransaction(transactionId) {
 
         document.getElementById('split-txn-id').value = transaction.id;
         document.getElementById('split-txn-info').innerHTML = `
-            <p><strong>Description:</strong> ${transaction.description}</p>
+            <p><strong>Description:</strong> ${escapeHtml(transaction.description)}</p>
             <p><strong>Amount:</strong> ${formatCurrency(Math.abs(parseFloat(transaction.amount)))}</p>
         `;
         document.getElementById('split-entries').innerHTML = '';
@@ -742,18 +874,22 @@ function displaySearchResults(results) {
 function createTransactionRow(txn) {
     const amount = parseFloat(txn.amount);
     const amountClass = amount < 0 ? 'expense' : 'income';
+    const txnId = safeDomId(txn.id);
+    const categoryHtml = txn.category
+        ? escapeHtml(txn.category.name)
+        : '<span class="uncategorized">Uncategorized</span>';
     return `
         <tr>
-            <td><input type="checkbox" class="transaction-checkbox" value="${txn.id}" onchange="toggleTransactionSelect('${txn.id}')"></td>
-            <td>${txn.date}</td>
-            <td>${txn.description} ${txn.is_recurring ? '🔄' : ''}</td>
-            <td>${txn.category ? txn.category.name : '<span class="uncategorized">Uncategorized</span>'}</td>
+            <td><input type="checkbox" class="transaction-checkbox" value="${txnId}" onchange="toggleTransactionSelect('${txnId}')"></td>
+            <td>${escapeHtml(txn.date)}</td>
+            <td>${escapeHtml(txn.description)} ${txn.is_recurring ? '🔄' : ''}</td>
+            <td>${categoryHtml}</td>
             <td class="${amountClass}">${formatCurrency(Math.abs(amount))}</td>
-            <td>${txn.transaction_type}</td>
+            <td>${escapeHtml(txn.transaction_type)}</td>
             <td>
-                <button class="btn btn-small btn-secondary" onclick="editTransaction('${txn.id}')">Edit</button>
-                <button class="btn btn-small btn-danger" onclick="deleteTransaction('${txn.id}')">Delete</button>
-                <button class="btn btn-small btn-secondary" onclick="splitTransaction('${txn.id}')">Split</button>
+                <button class="btn btn-small btn-secondary" onclick="editTransaction('${txnId}')">Edit</button>
+                <button class="btn btn-small btn-danger" onclick="deleteTransaction('${txnId}')">Delete</button>
+                <button class="btn btn-small btn-secondary" onclick="splitTransaction('${txnId}')">Split</button>
             </td>
         </tr>
     `;
@@ -767,13 +903,13 @@ function updateFilterOptions(filters) {
     // Update category filter
     const currentCategory = categoryFilter.value;
     categoryFilter.innerHTML = '<option value="">All Categories</option>' +
-        filters.categories.map(cat => `<option value="${cat}">${cat}</option>`).join('');
+        filters.categories.map(cat => `<option value="${escapeHtml(cat)}">${escapeHtml(cat)}</option>`).join('');
     categoryFilter.value = currentCategory;
     
     // Update account filter
     const currentAccount = accountFilter.value;
     accountFilter.innerHTML = '<option value="">All Accounts</option>' +
-        filters.accounts.map(acc => `<option value="${acc}">${acc}</option>`).join('');
+        filters.accounts.map(acc => `<option value="${escapeHtml(acc)}">${escapeHtml(acc)}</option>`).join('');
     accountFilter.value = currentAccount;
 }
 
@@ -809,8 +945,9 @@ function displayBudgets(statuses) {
         return `
             <div class="budget-item">
                 <div class="budget-header">
-                    <h4>${status.category_name}</h4>
-                    <button class="btn btn-small btn-danger" onclick="deleteBudget('${status.category_name}')">Delete</button>
+                    <h4>${escapeHtml(status.category_name)}</h4>
+                    <button class="btn btn-small btn-danger delete-budget-btn"
+                            data-category="${escapeHtml(status.category_name)}">Delete</button>
                 </div>
                 <div class="budget-progress">
                     <div class="progress-bar">
@@ -826,6 +963,9 @@ function displayBudgets(statuses) {
             </div>
         `;
     }).join('');
+    container.querySelectorAll('.delete-budget-btn').forEach(btn => {
+        btn.addEventListener('click', () => deleteBudget(btn.dataset.category));
+    });
 }
 
 function displayBudgetAlerts(alerts) {
@@ -837,8 +977,8 @@ function displayBudgetAlerts(alerts) {
     
     container.innerHTML = alerts.map(alert => `
         <div class="alert-item ${alert.message.includes('Over budget') ? 'alert-danger' : 'alert-warning'}">
-            <strong>${alert.category}</strong>
-            <p>${alert.message}</p>
+            <strong>${escapeHtml(alert.category)}</strong>
+            <p>${escapeHtml(alert.message)}</p>
         </div>
     `).join('');
 }
@@ -920,16 +1060,16 @@ function displayRecurringTransactions(recurring) {
     container.innerHTML = recurring.map(r => `
         <div class="recurring-item">
             <div class="recurring-header">
-                <h4>${r.description_pattern}</h4>
+                <h4>${escapeHtml(r.description_pattern)}</h4>
                 <span class="confidence-badge" style="background-color: ${getConfidenceColor(r.confidence)}">
                     ${(r.confidence * 100).toFixed(0)}% confidence
                 </span>
             </div>
             <div class="recurring-details">
                 <p><strong>Amount:</strong> ${formatCurrency(r.amount)}</p>
-                <p><strong>Frequency:</strong> ${r.frequency}</p>
-                <p><strong>Last Seen:</strong> ${r.last_seen}</p>
-                <p><strong>Next Expected:</strong> ${r.next_expected || 'N/A'}</p>
+                <p><strong>Frequency:</strong> ${escapeHtml(r.frequency)}</p>
+                <p><strong>Last Seen:</strong> ${escapeHtml(r.last_seen)}</p>
+                <p><strong>Next Expected:</strong> ${escapeHtml(r.next_expected || 'N/A')}</p>
                 <p><strong>Occurrences:</strong> ${r.transaction_count}</p>
             </div>
         </div>
@@ -979,15 +1119,20 @@ function displayCategoryRules(rules) {
         <div class="rule-item">
             <div class="rule-header">
                 <h4>Rule ${index + 1}</h4>
-                <button class="btn btn-small btn-danger" onclick="removeRule('${rule.pattern}', '${rule.category_name}')">Remove</button>
+                <button class="btn btn-small btn-danger remove-rule-btn"
+                        data-pattern="${escapeHtml(rule.pattern)}"
+                        data-category="${escapeHtml(rule.category_name)}">Remove</button>
             </div>
             <div class="rule-details">
-                <p><strong>Pattern:</strong> <code>${rule.pattern}</code></p>
-                <p><strong>Category:</strong> ${rule.category_name}${rule.parent_category ? ` (${rule.parent_category})` : ''}</p>
+                <p><strong>Pattern:</strong> <code>${escapeHtml(rule.pattern)}</code></p>
+                <p><strong>Category:</strong> ${escapeHtml(rule.category_name)}${rule.parent_category ? ` (${escapeHtml(rule.parent_category)})` : ''}</p>
                 <p><strong>Case Sensitive:</strong> ${rule.case_sensitive ? 'Yes' : 'No'}</p>
             </div>
         </div>
     `).join('');
+    container.querySelectorAll('.remove-rule-btn').forEach(btn => {
+        btn.addEventListener('click', () => removeRule(btn.dataset.pattern, btn.dataset.category));
+    });
 }
 
 function showAddRuleModal() {
@@ -1031,13 +1176,13 @@ async function testRulePattern() {
         const resultsDiv = document.getElementById('rule-test-results');
         
         if (!result.valid) {
-            resultsDiv.innerHTML = `<p class="error">Invalid pattern: ${result.error}</p>`;
+            resultsDiv.innerHTML = `<p class="error">Invalid pattern: ${escapeHtml(result.error)}</p>`;
             return;
         }
         
         resultsDiv.innerHTML = result.results.map(r => `
             <div class="test-result ${r.matches ? 'match' : 'no-match'}">
-                <strong>${r.string}</strong> - ${r.matches ? `✓ Matches: "${r.matched_text}"` : '✗ No match'}
+                <strong>${escapeHtml(r.string)}</strong> - ${r.matches ? `✓ Matches: "${escapeHtml(r.matched_text)}"` : '✗ No match'}
             </div>
         `).join('');
     } catch (error) {

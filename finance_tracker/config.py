@@ -36,6 +36,8 @@ Example:
 """
 
 import logging
+import os
+import stat
 from pathlib import Path
 from typing import Dict, Optional
 
@@ -79,8 +81,16 @@ class Config:
     def save(self) -> None:
         """Save configuration to file."""
         self.config_file.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            os.chmod(self.config_file.parent, stat.S_IRWXU)
+        except OSError:
+            pass
         with open(self.config_file, "w", encoding="utf-8") as f:
             yaml.dump(self.data, f, default_flow_style=False, sort_keys=False)
+        try:
+            os.chmod(self.config_file, stat.S_IRUSR | stat.S_IWUSR)
+        except OSError:
+            pass
 
     def get(self, key: str, default=None):
         """
@@ -137,6 +147,9 @@ class Config:
             "duplicates": {
                 "check_on_import": True,
                 "skip_duplicates": True,
+            },
+            "security": {
+                "encryption": True,
             },
         }
 

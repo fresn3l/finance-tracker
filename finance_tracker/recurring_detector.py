@@ -13,7 +13,7 @@ from datetime import date, timedelta
 from decimal import Decimal
 from typing import Dict, List, Optional
 
-from finance_tracker.models import Category, RecurringTransaction, Transaction
+from finance_tracker.models import RecurringTransaction, Transaction
 
 logger = logging.getLogger(__name__)
 
@@ -161,10 +161,11 @@ class RecurringTransactionDetector:
         occurrence_score = min(len(transactions) / 10.0, 1.0)
 
         # Check amount consistency
-        amounts = [abs(t.amount) for t in transactions]
+        amounts = [float(abs(t.amount)) for t in transactions]
         if amounts:
-            amount_variance = (max(amounts) - min(amounts)) / max(amounts) if max(amounts) > 0 else 1.0
-            consistency_score = max(0, 1.0 - amount_variance)
+            max_amount = max(amounts)
+            amount_variance = (max_amount - min(amounts)) / max_amount if max_amount > 0 else 1.0
+            consistency_score = max(0.0, 1.0 - amount_variance)
         else:
             consistency_score = 0.5
 
@@ -228,11 +229,8 @@ class RecurringTransactionDetector:
             pattern = self._normalize_description(transaction.description)
             if pattern in pattern_map:
                 recurring = pattern_map[pattern]
-                # Create updated transaction with recurring info
-                updated = Transaction(
-                    **transaction.model_dump(),
-                    is_recurring=True,
-                    recurring_id=recurring.id,
+                updated = transaction.model_copy(
+                    update={"is_recurring": True, "recurring_id": recurring.id}
                 )
                 updated_transactions.append(updated)
             else:

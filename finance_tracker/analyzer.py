@@ -34,11 +34,20 @@ Example:
 """
 
 from collections import defaultdict
-from datetime import date
 from decimal import Decimal
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
-from finance_tracker.models import MonthlySummary, SpendingPattern, Transaction
+from finance_tracker.models import (
+    CashFlowSummary,
+    CategoryDelta,
+    ComparisonDelta,
+    MonthlySummary,
+    MonthOverMonthComparison,
+    SpendingForecast,
+    SpendingPattern,
+    Transaction,
+    TransactionType,
+)
 
 
 class SpendingAnalyzer:
@@ -348,6 +357,132 @@ class SpendingAnalyzer:
         else:
             return "stable"  # Change is within ±10%, considered stable
 
+    def get_month_over_month(
+        self, year: int, month: int
+    ) -> MonthOverMonthComparison:
+        """
+        Compare a month to the previous calendar month.
+
+        Returns dollar and percent deltas for income, expenses, net, and
+        every category that appears in either month.
+        """
+        prev_year, prev_month = previous_calendar_month(year, month)
+        current = self.get_monthly_summary(year, month)
+        previous = self.get_monthly_summary(prev_year, prev_month)
+
+        categories = set(current.category_breakdown) | set(previous.category_breakdown)
+        category_deltas = [
+            _category_delta(
+                name,
+                current.category_breakdown.get(name, Decimal("0")),
+                previous.category_breakdown.get(name, Decimal("0")),
+            )
+            for name in categories
+        ]
+        category_deltas.sort(key=lambda d: abs(d.delta), reverse=True)
+
+        return MonthOverMonthComparison(
+            year=year,
+            month=month,
+            previous_year=prev_year,
+            previous_month=prev_month,
+            income=_comparison_delta(current.total_income, previous.total_income),
+            expenses=_comparison_delta(current.total_expenses, previous.total_expenses),
+            net=_comparison_delta(current.net_amount, previous.net_amount),
+            savings_rate_current=current.savings_rate,
+            savings_rate_previous=previous.savings_rate,
+            transaction_count_current=current.transaction_count,
+            transaction_count_previous=previous.transaction_count,
+            category_deltas=category_deltas,
+        )
+
+    def get_latest_month_over_month(self) -> Optional[MonthOverMonthComparison]:
+        """MoM comparison for the most recent month that has transactions."""
+        summaries = self.get_all_monthly_summaries()
+        if not summaries:
+            return None
+        latest = summaries[-1]
+        return self.get_month_over_month(latest.year, latest.month)
+
+    def get_cash_flow(self, year: int, month: int) -> CashFlowSummary:
+        """
+        Split a month into operating income/expenses vs internal transfers.
+        """
+        month_transactions = self._filter_transactions(year, month)
+        income = Decimal("0")
+        expenses = Decimal("0")
+        transfers_in = Decimal("0")
+        transfers_out = Decimal("0")
+
+        for transaction in month_transactions:
+            if transaction.transaction_type == TransactionType.TRANSFER:
+                if transaction.amount > 0:
+                    transfers_in += transaction.absolute_amount
+                else:
+                    transfers_out += transaction.absolute_amount
+            elif transaction.is_income:
+                income += transaction.absolute_amount
+            elif transaction.is_expense:
+                expenses += transaction.absolute_amount
+
+        net_operating = income - expenses
+        return CashFlowSummary(
+            year=year,
+            month=month,
+            income=income,
+            expenses=expenses,
+            transfers_in=transfers_in,
+            transfers_out=transfers_out,
+            net_operating=net_operating,
+            net_cash=net_operating + transfers_in - transfers_out,
+        )
+
+    def forecast_next_month(
+        self, months: int = 3, category_name: Optional[str] = None
+    ) -> Optional[SpendingForecast]:
+        """
+        Predict next-month spending with a simple moving average.
+
+        Uses the most recent `months` monthly totals (overall expenses or one
+        category). Returns None if there is no history.
+        """
+        summaries = self.get_all_monthly_summaries()
+        if not summaries:
+            return None
+
+        recent = summaries[-months:]
+        if category_name:
+            totals = [
+                s.category_breakdown.get(category_name, Decimal("0")) for s in recent
+            ]
+        else:
+            totals = [s.total_expenses for s in recent]
+
+        average = sum(totals) / len(totals)
+        return SpendingForecast(
+            category=category_name,
+            predicted_amount=average,
+            months_used=len(recent),
+            method="moving_average",
+            average_monthly=average,
+        )
+
+    def forecast_all_categories(self, months: int = 3) -> List[SpendingForecast]:
+        """Moving-average forecast for total expenses and each category."""
+        forecasts = []
+        overall = self.forecast_next_month(months=months)
+        if overall:
+            forecasts.append(overall)
+
+        categories = set()
+        for summary in self.get_all_monthly_summaries():
+            categories.update(summary.category_breakdown.keys())
+        for name in sorted(categories):
+            forecast = self.forecast_next_month(months=months, category_name=name)
+            if forecast:
+                forecasts.append(forecast)
+        return forecasts
+
     def _filter_transactions(
         self, year: Optional[int] = None, month: Optional[int] = None
     ) -> List[Transaction]:
@@ -358,6 +493,39 @@ class SpendingAnalyzer:
             if month is not None:
                 filtered = [t for t in filtered if t.date.month == month]
         return filtered
+
+
+def previous_calendar_month(year: int, month: int) -> Tuple[int, int]:
+    """Return (year, month) for the prior calendar month."""
+    if month == 1:
+        return year - 1, 12
+    return year, month - 1
+
+
+def _percent_change(current: Decimal, previous: Decimal) -> Optional[float]:
+    """Percent change; None when previous is zero and current is not."""
+    if previous == 0:
+        return 0.0 if current == 0 else None
+    return float((current - previous) / abs(previous) * 100)
+
+
+def _comparison_delta(current: Decimal, previous: Decimal) -> ComparisonDelta:
+    return ComparisonDelta(
+        current=current,
+        previous=previous,
+        delta=current - previous,
+        percent_change=_percent_change(current, previous),
+    )
+
+
+def _category_delta(name: str, current: Decimal, previous: Decimal) -> CategoryDelta:
+    return CategoryDelta(
+        category=name,
+        current=current,
+        previous=previous,
+        delta=current - previous,
+        percent_change=_percent_change(current, previous),
+    )
 
 
 def analyze_spending(transactions: List[Transaction]) -> SpendingAnalyzer:
